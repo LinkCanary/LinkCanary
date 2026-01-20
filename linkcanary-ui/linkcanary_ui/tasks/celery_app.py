@@ -12,7 +12,7 @@ if settings.use_celery:
             "linkcanary",
             broker=settings.celery_broker_url,
             backend=settings.celery_result_backend,
-            include=["backend.tasks.crawl_task"],
+            include=["linkcanary_ui.tasks.crawl_task"],
         )
         
         celery_app.conf.update(
