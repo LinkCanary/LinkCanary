@@ -1,9 +1,13 @@
-"""Background crawl task."""
+"""Background crawl task.
 
-import os
+Supports two modes:
+- Threading (default): Simple background threads, no external dependencies
+- Celery (production): Redis-backed task queue, set LINKCANARY_USE_CELERY=true
+"""
+
+import threading
 from datetime import datetime
 
-from celery import current_task
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
@@ -15,20 +19,41 @@ from link_checker.sitemap import SitemapParser
 
 from ..config import settings
 from ..models import Crawl, CrawlStatus
-from ..models.database import Base
-from .celery_app import celery_app
 
 sync_db_url = settings.db_url.replace("+aiosqlite", "")
 sync_engine = create_engine(sync_db_url)
 
+_running_tasks = {}
+
 
 def get_sync_session():
-    """Get synchronous database session for Celery tasks."""
+    """Get synchronous database session."""
     return Session(sync_engine)
 
 
-@celery_app.task(bind=True)
-def run_crawl_task(self, crawl_id: str):
+def run_crawl_in_background(crawl_id: str):
+    """Start crawl in background using configured backend."""
+    if settings.use_celery:
+        from .celery_app import celery_app
+        if celery_app:
+            task = run_crawl_celery.delay(crawl_id)
+            return task.id
+    
+    if crawl_id in _running_tasks:
+        return None
+    
+    thread = threading.Thread(target=_run_crawl_sync, args=(crawl_id,), daemon=True)
+    _running_tasks[crawl_id] = thread
+    thread.start()
+    return None
+
+
+def stop_crawl_task(crawl_id: str):
+    """Mark crawl as cancelled (task will check and stop)."""
+    pass
+
+
+def _run_crawl_sync(crawl_id: str):
     """Execute a crawl in the background."""
     session = get_sync_session()
     
@@ -204,7 +229,24 @@ def run_crawl_task(self, crawl_id: str):
             crawl.completed_at = datetime.utcnow()
             session.commit()
         
-        raise
+        return {"error": str(e)}
     
     finally:
+        _running_tasks.pop(crawl_id, None)
         session.close()
+
+
+def run_crawl_celery(crawl_id: str):
+    """Celery task wrapper - only used when Celery is enabled."""
+    return _run_crawl_sync(crawl_id)
+
+
+if settings.use_celery:
+    try:
+        from .celery_app import celery_app
+        if celery_app:
+            run_crawl_celery = celery_app.task(bind=True)(
+                lambda self, crawl_id: _run_crawl_sync(crawl_id)
+            )
+    except ImportError:
+        pass

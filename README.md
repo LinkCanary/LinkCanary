@@ -63,21 +63,25 @@ linkcheck-report link_report.csv -o report.html --open
 The web interface provides a user-friendly way to run crawls without command-line knowledge.
 
 ```bash
-# Install UI dependencies
+# Install UI
 cd linkcanary-ui
 pip install -e .
-
-# Start Redis (required for background tasks)
-redis-server
-
-# Start Celery worker (in a separate terminal)
-celery -A backend.tasks.celery_app worker --loglevel=info
 
 # Start the UI server
 linkcanary-ui --open
 ```
 
 Then open http://localhost:3000 in your browser.
+
+For production, enable Celery/Redis for better task management:
+
+```bash
+pip install -e ".[celery]"
+export LINKCANARY_USE_CELERY=true
+redis-server &
+celery -A backend.tasks.celery_app worker &
+linkcanary-ui
+```
 
 **UI Features:**
 - Dashboard with quick start crawl
