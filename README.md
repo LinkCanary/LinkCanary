@@ -1,6 +1,16 @@
 # LinkCanary
 
-A command-line tool that crawls websites via sitemap, checks all links, and identifies broken links and redirect chains.
+A command-line tool that crawls websites via sitemap, checks all links, and identifies broken links and redirect chains. Includes a web-based UI for non-technical users.
+
+## Features
+
+- Crawl websites via sitemap.xml
+- Detect broken links (4xx, 5xx errors)
+- Identify redirect chains and loops
+- Canonical URL redirect detection
+- Priority-based issue classification
+- CSV and interactive HTML reports
+- Web-based UI with real-time progress
 
 ## Installation
 
@@ -16,6 +26,8 @@ pip install -e .
 ```
 
 ## Usage
+
+### Command Line
 
 ```bash
 # Basic usage
@@ -35,7 +47,45 @@ linkcheck https://example.com/sitemap.xml --include-subdomains
 
 # Only check pages modified after a specific date
 linkcheck https://example.com/sitemap.xml --since 2025-01-01
+
+# Generate HTML report alongside CSV
+linkcheck https://example.com/sitemap.xml --html-report report.html --open
 ```
+
+### Generate HTML Report from Existing CSV
+
+```bash
+linkcheck-report link_report.csv -o report.html --open
+```
+
+### Web UI
+
+The web interface provides a user-friendly way to run crawls without command-line knowledge.
+
+```bash
+# Install UI dependencies
+cd linkcanary-ui
+pip install -e .
+
+# Start Redis (required for background tasks)
+redis-server
+
+# Start Celery worker (in a separate terminal)
+celery -A backend.tasks.celery_app worker --loglevel=info
+
+# Start the UI server
+linkcanary-ui --open
+```
+
+Then open http://localhost:3000 in your browser.
+
+**UI Features:**
+- Dashboard with quick start crawl
+- Advanced crawl configuration
+- Real-time progress monitoring
+- Reports library with search and filtering
+- Interactive report viewer
+- CSV/HTML report downloads
 
 ## Options
 
@@ -53,6 +103,8 @@ linkcheck https://example.com/sitemap.xml --since 2025-01-01
 | `--expand-duplicates` | `false` | Show all occurrences instead of aggregating |
 | `--include-subdomains` | `false` | Treat subdomains as internal links |
 | `--since` | `none` | Only crawl pages modified after date (YYYY-MM-DD) |
+| `--html-report` | `none` | Generate HTML report at specified path |
+| `--open` | `false` | Open HTML report in browser after generation |
 
 ## Exit Codes
 
@@ -75,3 +127,7 @@ The CSV report includes:
 - **redirect_chain** - Full chain with status codes (e.g., `301:url1 → 302:url2 → 200:url3`)
 - **final_url** - Where the link ultimately resolves
 - **recommended_fix** - Suggested action
+
+## License
+
+MIT
