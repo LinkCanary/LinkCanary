@@ -34,6 +34,7 @@ dependencies = [
 
 [project.scripts]
 linkcheck = "link_checker.cli:main"
+linkcheck-report = "link_checker.report_cli:main"
 
 [project.urls]
 Homepage = "https://github.com/chesterbeard/linkcanary"

@@ -10,6 +10,7 @@ from tqdm import tqdm
 from . import __version__
 from .checker import LinkChecker
 from .crawler import PageCrawler
+from .html_reporter import HTMLReportGenerator
 from .reporter import ReportGenerator
 from .sitemap import SitemapParser
 
@@ -128,6 +129,19 @@ def create_parser() -> argparse.ArgumentParser:
         '--version',
         action='version',
         version=f'%(prog)s {__version__}',
+    )
+    
+    parser.add_argument(
+        '--html-report',
+        default=None,
+        metavar='FILE',
+        help='Generate HTML report at specified path',
+    )
+    
+    parser.add_argument(
+        '--open',
+        action='store_true',
+        help='Open HTML report in browser after generation',
     )
     
     return parser
@@ -289,6 +303,12 @@ def main(args=None):
     print_summary(summary)
     
     print(f"\nReport saved to: {parsed_args.output}")
+    
+    if parsed_args.html_report:
+        html_reporter = HTMLReportGenerator()
+        html_reporter.load_csv(parsed_args.output)
+        html_reporter.generate_html(parsed_args.html_report, open_browser=parsed_args.open)
+        print(f"HTML report saved to: {parsed_args.html_report}")
     
     has_issues = (
         summary.get('broken', 0) > 0 or
