@@ -19,7 +19,7 @@ from ..models.schemas import (
     ValidateSitemapRequest,
     ValidateSitemapResponse,
 )
-from ..tasks.crawl_task import run_crawl_task
+from ..tasks.crawl_task import run_crawl_in_background
 
 router = APIRouter(prefix="/api/crawls", tags=["crawls"])
 
@@ -58,9 +58,7 @@ async def create_crawl(
     await db.commit()
     await db.refresh(crawl)
     
-    task = run_crawl_task.delay(crawl.id)
-    crawl.celery_task_id = task.id
-    await db.commit()
+    run_crawl_in_background(crawl.id)
     
     return CrawlResponse(**crawl.to_dict())
 
@@ -143,10 +141,6 @@ async def stop_crawl(
     if crawl.status != CrawlStatus.IN_PROGRESS:
         raise HTTPException(status_code=400, detail="Crawl is not running")
     
-    if crawl.celery_task_id:
-        from ..tasks.crawl_task import celery_app
-        celery_app.control.revoke(crawl.celery_task_id, terminate=True)
-    
     crawl.status = CrawlStatus.CANCELLED
     crawl.completed_at = datetime.utcnow()
     await db.commit()
@@ -186,9 +180,7 @@ async def rerun_crawl(
     await db.commit()
     await db.refresh(crawl)
     
-    task = run_crawl_task.delay(crawl.id)
-    crawl.celery_task_id = task.id
-    await db.commit()
+    run_crawl_in_background(crawl.id)
     
     return CrawlResponse(**crawl.to_dict())
 

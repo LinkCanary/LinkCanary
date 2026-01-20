@@ -14,8 +14,8 @@ Web-based user interface for LinkCanary link checker.
 ## Requirements
 
 - Python 3.10+
-- Redis (for Celery task queue)
-- Node.js 18+ (for frontend development)
+- Node.js 18+ (for frontend development only)
+- Redis (optional, for production with Celery)
 
 ## Installation
 
@@ -61,20 +61,28 @@ Options:
 - `--data-dir DIR` - Custom data directory
 - `--debug` - Enable debug mode
 
-### Start Celery Worker (Required for Background Crawls)
+### Production Setup with Celery (Optional)
 
-First, start Redis:
+For production deployments with better task management, enable Celery:
 
 ```bash
+# Install with Celery support
+pip install linkcanary-ui[celery]
+
+# Start Redis
 redis-server
-```
 
-Then start the Celery worker:
+# Set environment variable to enable Celery
+export LINKCANARY_USE_CELERY=true
 
-```bash
-cd linkcanary-ui
+# Start Celery worker
 celery -A backend.tasks.celery_app worker --loglevel=info
+
+# Start UI server (in another terminal)
+linkcanary-ui
 ```
+
+Without Celery, crawls run in background threads (simpler, good for local use).
 
 ### Access the UI
 

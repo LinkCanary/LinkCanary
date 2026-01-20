@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     data_dir: Path = Path.home() / ".linkcanary"
     database_url: Optional[str] = None
     
+    use_celery: bool = False
     celery_broker_url: str = "redis://localhost:6379/0"
     celery_result_backend: str = "redis://localhost:6379/0"
     
