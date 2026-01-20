@@ -139,7 +139,7 @@ Data:   {settings.data_dir}
         webbrowser.open(f"http://{args.host}:{args.port}")
     
     uvicorn.run(
-        "backend.main:app",
+        "linkcanary_ui.main:app",
         host=args.host,
         port=args.port,
         reload=args.debug,

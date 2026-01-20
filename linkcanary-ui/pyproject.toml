@@ -48,7 +48,7 @@ dev = [
 ]
 
 [project.scripts]
-linkcanary-ui = "backend.main:cli"
+linkcanary-ui = "linkcanary_ui.main:cli"
 
 [project.urls]
 Homepage = "https://github.com/chesterbeard/linkcanary"
@@ -56,7 +56,7 @@ Repository = "https://github.com/chesterbeard/linkcanary"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["backend*"]
+include = ["linkcanary_ui*"]
 
 [tool.setuptools.package-data]
 "*" = ["static/*", "static/**/*"]
