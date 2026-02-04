@@ -9,6 +9,7 @@ Web-based user interface for LinkCanary link checker.
 - **Progress View** - Real-time crawl progress with WebSocket updates
 - **Reports Library** - Browse, filter, and manage all crawl reports
 - **Report Viewer** - Interactive issue viewer with filtering and search
+- **Backlink Checker** - Check if pages from a sitemap contain links to a target URL
 - **Settings** - Configure default crawl settings and storage options
 
 ## Requirements
@@ -111,6 +112,7 @@ Open your browser to: http://localhost:3000
 - `GET /api/settings` - Get settings
 - `PUT /api/settings` - Update settings
 - `POST /api/crawls/validate-sitemap` - Validate sitemap URL
+- `POST /api/backlinks/check` - Check for backlinks to a target URL
 - `WS /ws/crawl/:id` - WebSocket for crawl progress
 
 ## Architecture

@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from . import __version__
-from .api import crawls, reports, settings as settings_api, stats, websocket
+from .api import backlinks, crawls, reports, settings as settings_api, stats, websocket
 from .config import settings
 from .models import init_db
 
@@ -42,6 +42,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(backlinks.router)
 app.include_router(crawls.router)
 app.include_router(reports.router)
 app.include_router(stats.router)
@@ -50,7 +51,7 @@ app.include_router(websocket.router)
 
 static_dir = Path(__file__).parent / "static"
 if static_dir.exists():
-    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+    app.mount("/assets", StaticFiles(directory=str(static_dir / "assets")), name="assets")
 
 
 @app.get("/")
@@ -64,6 +65,12 @@ async def root():
         "version": __version__,
         "docs": "/docs",
     }
+
+
+@app.get("/vite.svg")
+async def vite_svg():
+    """Serve vite.svg."""
+    return FileResponse(static_dir / "vite.svg")
 
 
 @app.get("/health")

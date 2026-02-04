@@ -128,3 +128,29 @@ class SettingsSchema(BaseModel):
     default_internal_only: bool = False
     report_retention_days: int = 90
     max_storage_mb: int = 1000
+
+
+class BacklinkCheckRequest(BaseModel):
+    """Request to check for backlinks."""
+    target_url: str = Field(..., description="URL to check for backlinks to")
+    sitemap_url: str = Field(..., description="Sitemap URL containing pages to check")
+    user_agent: str = Field(default="LinkCanary/1.0", description="User agent for requests")
+    timeout: int = Field(default=10, ge=5, le=60, description="Request timeout in seconds")
+
+
+class BacklinkSource(BaseModel):
+    """Single backlink source."""
+    source_url: str
+    found: bool
+    link_text: Optional[str] = None
+    error: Optional[str] = None
+
+
+class BacklinkCheckResponse(BaseModel):
+    """Response from backlink check."""
+    target_url: str
+    sitemap_url: str
+    pages_checked: int
+    backlinks_found: int
+    sources: list[BacklinkSource]
+    total_pages: int

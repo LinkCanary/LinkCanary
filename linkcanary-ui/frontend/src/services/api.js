@@ -62,6 +62,13 @@ export const settingsApi = {
   }),
 };
 
+export const backlinksApi = {
+  check: (data) => fetchJson(`${API_BASE}/backlinks/check`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+};
+
 export function createCrawlWebSocket(crawlId, onMessage, onError, onClose) {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const wsUrl = `${protocol}//${window.location.host}/ws/crawl/${crawlId}`;
