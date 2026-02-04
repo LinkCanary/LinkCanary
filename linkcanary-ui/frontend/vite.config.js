@@ -18,7 +18,7 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: '../backend/static',
+    outDir: '../linkcanary_ui/static',
     emptyOutDir: true,
   },
 })

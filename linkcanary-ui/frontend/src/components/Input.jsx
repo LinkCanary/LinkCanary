@@ -2,15 +2,16 @@ export default function Input({ label, error, className = '', ...props }) {
   return (
     <div className={className}>
       {label && (
-        <label className="block text-sm font-medium text-gray-700 mb-1">
+        <label className="block text-sm font-medium text-dark dark:text-secondary mb-1">
           {label}
         </label>
       )}
       <input
         className={`
-          block w-full rounded-lg border px-4 py-2.5 text-gray-900
-          placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500
-          ${error ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300'}
+          block w-full rounded-lg border px-4 py-2.5 text-dark dark:text-primary
+          bg-white dark:bg-dark/50 placeholder-gray-400 dark:placeholder-gray-500
+          focus:outline-none focus:ring-2 focus:ring-primary
+          ${error ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300 dark:border-primary/30'}
         `}
         {...props}
       />
@@ -25,15 +26,15 @@ export function Select({ label, error, children, className = '', ...props }) {
   return (
     <div className={className}>
       {label && (
-        <label className="block text-sm font-medium text-gray-700 mb-1">
+        <label className="block text-sm font-medium text-dark dark:text-secondary mb-1">
           {label}
         </label>
       )}
       <select
         className={`
-          block w-full rounded-lg border px-4 py-2.5 text-gray-900
-          focus:outline-none focus:ring-2 focus:ring-blue-500
-          ${error ? 'border-red-300' : 'border-gray-300'}
+          block w-full rounded-lg border px-4 py-2.5 text-dark dark:text-primary
+          bg-white dark:bg-dark/50 focus:outline-none focus:ring-2 focus:ring-primary
+          ${error ? 'border-red-300' : 'border-gray-300 dark:border-primary/30'}
         `}
         {...props}
       >
@@ -51,10 +52,10 @@ export function Checkbox({ label, className = '', ...props }) {
     <label className={`flex items-center gap-2 ${className}`}>
       <input
         type="checkbox"
-        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+        className="h-4 w-4 rounded border-gray-300 dark:border-primary/30 text-primary focus:ring-primary"
         {...props}
       />
-      <span className="text-sm text-gray-700">{label}</span>
+      <span className="text-sm text-dark dark:text-secondary">{label}</span>
     </label>
   );
 }
