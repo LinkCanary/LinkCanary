@@ -30,17 +30,29 @@ def extract_domain(url: str) -> str:
     return parsed.netloc or url
 
 
+def normalize_sitemap_url(url: str) -> str:
+    """Ensure URL points to sitemap.xml."""
+    url = url.strip().rstrip('/')
+    if not url.endswith('.xml'):
+        if not url.endswith('/sitemap'):
+            url = f"{url}/sitemap.xml"
+        else:
+            url = f"{url}.xml"
+    return url
+
+
 @router.post("", response_model=CrawlResponse)
 async def create_crawl(
     request: CrawlCreate,
     db: AsyncSession = Depends(get_db),
 ):
     """Start a new crawl."""
-    name = request.name or extract_domain(request.sitemap_url)
+    sitemap_url = normalize_sitemap_url(request.sitemap_url)
+    name = request.name or extract_domain(sitemap_url)
     
     crawl = Crawl(
         name=name,
-        sitemap_url=request.sitemap_url,
+        sitemap_url=sitemap_url,
         status=CrawlStatus.PENDING,
         internal_only=request.settings.internal_only,
         external_only=request.settings.external_only,
@@ -229,15 +241,16 @@ async def get_report(
         total=len(issues),
     )
 
-
 @router.post("/validate-sitemap", response_model=ValidateSitemapResponse)
 async def validate_sitemap(request: ValidateSitemapRequest):
     """Validate that a sitemap URL is accessible."""
     import requests
     
+    url = normalize_sitemap_url(request.url)
+    
     try:
         response = requests.head(
-            request.url,
+            url,
             timeout=10,
             headers={"User-Agent": "LinkCanary/1.0"},
             allow_redirects=True,
@@ -250,7 +263,7 @@ async def validate_sitemap(request: ValidateSitemapRequest):
             )
         
         response = requests.get(
-            request.url,
+            url,
             timeout=15,
             headers={"User-Agent": "LinkCanary/1.0"},
         )
@@ -258,7 +271,7 @@ async def validate_sitemap(request: ValidateSitemapRequest):
         from link_checker.sitemap import SitemapParser
         parser = SitemapParser()
         try:
-            urls = parser.parse_sitemap(request.url)
+            urls = parser.parse_sitemap(url)
             return ValidateSitemapResponse(
                 valid=True,
                 page_count=len(urls),
