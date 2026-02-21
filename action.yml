@@ -1,0 +1,74 @@
+name: 'LinkCanary'
+description: 'Crawl sitemap and fail builds on broken links - CI/CD-native link checker'
+author: 'LinkCanary'
+
+branding:
+  icon: 'link'
+  color: 'yellow'
+
+inputs:
+  sitemap-url:
+    description: 'URL to the sitemap.xml file'
+    required: true
+  fail-on-priority:
+    description: 'Exit 1 if issues at or above this priority level'
+    required: false
+    default: 'high'
+  max-pages:
+    description: 'Limit pages to crawl (0 = no limit)'
+    required: false
+    default: '0'
+  skip-ok:
+    description: 'Exclude 200 OK links from report'
+    required: false
+    default: 'true'
+  delay:
+    description: 'Seconds between requests'
+    required: false
+    default: '0.5'
+  timeout:
+    description: 'Request timeout in seconds'
+    required: false
+    default: '10'
+  user-agent:
+    description: 'Custom User-Agent string'
+    required: false
+    default: 'LinkCanary/1.0'
+  internal-only:
+    description: 'Only check internal links'
+    required: false
+    default: 'false'
+  external-only:
+    description: 'Only check external links'
+    required: false
+    default: 'false'
+  include-subdomains:
+    description: 'Treat subdomains as internal links'
+    required: false
+    default: 'false'
+
+outputs:
+  total-issues:
+    description: 'Total number of issues found'
+  critical:
+    description: 'Number of critical priority issues'
+  high:
+    description: 'Number of high priority issues'
+  medium:
+    description: 'Number of medium priority issues'
+  low:
+    description: 'Number of low priority issues'
+  broken:
+    description: 'Number of broken links (4xx/5xx)'
+  redirect-loops:
+    description: 'Number of redirect loops'
+  redirect-chains:
+    description: 'Number of redirect chains'
+  exit-code:
+    description: 'Exit code (0=clean, 1=failed)'
+
+runs:
+  using: 'docker'
+  image: 'Dockerfile'
+  args:
+    - ${{ inputs.sitemap-url }}

@@ -144,6 +144,20 @@ def create_parser() -> argparse.ArgumentParser:
         help='Open HTML report in browser after generation',
     )
     
+    parser.add_argument(
+        '--fail-on-priority',
+        choices=['critical', 'high', 'medium', 'low', 'any', 'none'],
+        default='any',
+        help='Exit 1 if issues at or above this priority (default: any). '
+             'Use "none" to always exit 0.',
+    )
+    
+    parser.add_argument(
+        '--ci',
+        action='store_true',
+        help='Output in GitHub Actions format (sets GITHUB_OUTPUT)',
+    )
+    
     return parser
 
 
@@ -155,8 +169,29 @@ LinkCanary v{__version__}
 """)
 
 
-def print_summary(summary: dict):
+def print_summary(summary: dict, ci_mode: bool = False):
     """Print the summary statistics."""
+    if ci_mode:
+        # GitHub Actions output format
+        import os
+        github_output = os.environ.get('GITHUB_OUTPUT')
+        output_lines = [
+            f"total-issues={summary.get('total_links', 0)}",
+            f"critical={summary.get('critical', 0)}",
+            f"high={summary.get('high', 0)}",
+            f"medium={summary.get('medium', 0)}",
+            f"low={summary.get('low', 0)}",
+            f"broken={summary.get('broken', 0)}",
+            f"redirect-loops={summary.get('redirect_loops', 0)}",
+            f"redirect-chains={summary.get('redirect_chains', 0)}",
+        ]
+        if github_output:
+            with open(github_output, 'a') as f:
+                f.write('\n'.join(output_lines) + '\n')
+        else:
+            for line in output_lines:
+                print(f"::{line}")
+    
     print("""
 Summary
 -------""")
@@ -201,6 +236,47 @@ Priority Breakdown
         print(f"  Medium:   {medium:>4} issues")
     if low > 0:
         print(f"  Low:      {low:>4} issues")
+
+
+def check_priority_threshold(summary: dict, fail_on: str) -> bool:
+    """Check if issues exceed the priority threshold.
+
+    Returns True if build should fail (issues at or above threshold).
+
+    Priority levels (lower = more severe):
+    - critical = 0
+    - high = 1
+    - medium = 2
+    - low = 3
+
+    fail_on='high' will fail if critical OR high issues exist.
+    """
+    if fail_on == 'none':
+        return False
+
+    if fail_on == 'any':
+        total = (
+            summary.get('critical', 0) +
+            summary.get('high', 0) +
+            summary.get('medium', 0) +
+            summary.get('low', 0)
+        )
+        return total > 0
+
+    priority_levels = {'critical': 0, 'high': 1, 'medium': 2, 'low': 3}
+    threshold = priority_levels.get(fail_on, 0)
+
+    # Fail if any priority level is <= threshold (more severe or equal)
+    if summary.get('critical', 0) > 0 and 0 <= threshold:
+        return True
+    if summary.get('high', 0) > 0 and 1 <= threshold:
+        return True
+    if summary.get('medium', 0) > 0 and 2 <= threshold:
+        return True
+    if summary.get('low', 0) > 0 and 3 <= threshold:
+        return True
+
+    return False
 
 
 def main(args=None):
@@ -300,7 +376,7 @@ def main(args=None):
     reporter.save_report(df, parsed_args.output)
     
     summary = reporter.get_summary(df)
-    print_summary(summary)
+    print_summary(summary, ci_mode=parsed_args.ci)
     
     print(f"\nReport saved to: {parsed_args.output}")
     
@@ -310,20 +386,26 @@ def main(args=None):
         html_reporter.generate_html(parsed_args.html_report, open_browser=parsed_args.open)
         print(f"HTML report saved to: {parsed_args.html_report}")
     
-    has_issues = (
-        summary.get('broken', 0) > 0 or
-        summary.get('redirect_loops', 0) > 0 or
-        summary.get('redirect_chains', 0) > 0 or
-        summary.get('redirects', 0) > 0 or
-        summary.get('canonical_redirects', 0) > 0 or
-        summary.get('errors', 0) > 0
-    )
+    # Check against priority threshold
+    should_fail = check_priority_threshold(summary, parsed_args.fail_on_priority)
     
-    if has_issues:
-        print("Exiting with code 1 (issues found)")
+    if should_fail:
+        print(f"\nExiting with code 1 (issues found at {parsed_args.fail_on_priority}+ priority)")
+        if parsed_args.ci:
+            import os
+            github_output = os.environ.get('GITHUB_OUTPUT')
+            if github_output:
+                with open(github_output, 'a') as f:
+                    f.write('exit-code=1\n')
         return EXIT_ISSUES_FOUND
     else:
-        print("Exiting with code 0 (no issues)")
+        print(f"\nExiting with code 0 (no issues at {parsed_args.fail_on_priority}+ priority)")
+        if parsed_args.ci:
+            import os
+            github_output = os.environ.get('GITHUB_OUTPUT')
+            if github_output:
+                with open(github_output, 'a') as f:
+                    f.write('exit-code=0\n')
         return EXIT_SUCCESS
 
 
