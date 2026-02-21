@@ -1,0 +1,67 @@
+name: Test LinkCanary Action
+
+on:
+  push:
+    branches: [main, 'feature/**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      sitemap-url:
+        description: 'Sitemap URL to test'
+        required: false
+        default: 'https://linkcanary.com/sitemap.xml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    name: Test LinkCanary Action
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Run LinkCanary
+        id: linkcanary
+        uses: ./
+        with:
+          sitemap-url: ${{ github.event.inputs.sitemap-url || 'https://linkcanary.com/sitemap.xml' }}
+          fail-on-priority: critical
+          max-pages: '5'
+          skip-ok: 'true'
+      
+      - name: Check outputs
+        run: |
+          echo "Total issues: ${{ steps.linkcanary.outputs.total-issues }}"
+          echo "Critical: ${{ steps.linkcanary.outputs.critical-count }}"
+          echo "High: ${{ steps.linkcanary.outputs.high-count }}"
+          echo "Medium: ${{ steps.linkcanary.outputs.medium-count }}"
+          echo "Low: ${{ steps.linkcanary.outputs.low-count }}"
+          echo "Report path: ${{ steps.linkcanary.outputs.report-path }}"
+      
+      - name: Upload report artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: linkcanary-report
+          path: |
+            link_report.csv
+            report.html
+          retention-days: 30
+
+  test-fail-on-priority:
+    runs-on: ubuntu-latest
+    name: Test fail-on-priority logic
+    needs: test
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      # This should always pass (none = never fail)
+      - name: Run with fail-on-priority: none
+        uses: ./
+        with:
+          sitemap-url: https://linkcanary.com/sitemap.xml
+          fail-on-priority: none
+          max-pages: '3'

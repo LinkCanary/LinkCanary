@@ -4,11 +4,12 @@ LABEL maintainer="LinkCanary"
 LABEL description="CI/CD-native link checker for sitemaps"
 LABEL version="0.3"
 
-# Install system dependencies for lxml
+# Install system dependencies for lxml + curl for webhooks
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     libxml2-dev \
     libxslt1-dev \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy and install LinkCanary
