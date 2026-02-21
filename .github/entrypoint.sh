@@ -9,6 +9,8 @@ mkdir -p /output
 
 # Parse inputs from environment variables (GitHub Actions sets these)
 SITEMAP_URL="${INPUT_SITEMAP_URL:-$1}"
+SINGLE_URL="${INPUT_URL:-}"
+URLS_FILE="${INPUT_URLS_FILE:-}"
 FAIL_ON="${INPUT_FAIL_ON_PRIORITY:-high}"
 MAX_PAGES="${INPUT_MAX_PAGES:-0}"
 SKIP_OK="${INPUT_SKIP_OK:-true}"
@@ -37,9 +39,9 @@ case "$FORMAT" in
   *)      REPORT_EXT="csv" ;;
 esac
 
-# Validate required input
-if [ -z "$SITEMAP_URL" ]; then
-    echo "::error::sitemap-url is required"
+# Validate required input - need at least one source
+if [ -z "$SITEMAP_URL" ] && [ -z "$SINGLE_URL" ] && [ -z "$URLS_FILE" ]; then
+    echo "::error::Must provide sitemap-url, url, or urls-file"
     exit 2
 fi
 
@@ -54,6 +56,28 @@ ARGS="$ARGS --max-retries ${MAX_RETRIES}"
 ARGS="$ARGS --retry-delay ${RETRY_DELAY}"
 ARGS="$ARGS --retry-backoff ${RETRY_BACKOFF}"
 ARGS="$ARGS --ci"
+
+# Handle input mode
+if [ -n "$SINGLE_URL" ]; then
+    # Single URL mode
+    ARGS="$ARGS --url \"${SINGLE_URL}\""
+    echo "Mode: Single URL - ${SINGLE_URL}"
+elif [ -n "$URLS_FILE" ]; then
+    # URLs from file mode - copy file to container if needed
+    if [ -f "$URLS_FILE" ]; then
+        cp "$URLS_FILE" /tmp/urls.txt
+        ARGS="$ARGS --urls-file /tmp/urls.txt"
+        URL_COUNT=$(wc -l < /tmp/urls.txt | tr -d ' ')
+        echo "Mode: URLs from file - ${URL_COUNT} URLs"
+    else
+        echo "::error::urls-file not found: ${URLS_FILE}"
+        exit 2
+    fi
+else
+    # Sitemap mode (default)
+    ARGS="$ARGS ${SITEMAP_URL}"
+    echo "Mode: Sitemap - ${SITEMAP_URL}"
+fi
 
 if [ "$MAX_PAGES" != "0" ] && [ -n "$MAX_PAGES" ]; then
     ARGS="$ARGS --max-pages ${MAX_PAGES}"
