@@ -16,6 +16,8 @@ class WebhookType(str, enum.Enum):
     SLACK = "slack"
     DISCORD = "discord"
     GENERIC = "generic"
+    JIRA = "jira"
+    ASANA = "asana"
 
 
 class WebhookEvent(str, enum.Enum):
@@ -51,6 +53,18 @@ class Webhook(Base):
         default="crawl_completed,crawl_failed",
     )
     filters: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
+    # Jira configuration
+    jira_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    jira_email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    jira_api_token: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    jira_project_key: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    jira_issue_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, default="Task")
+
+    # Asana configuration
+    asana_token: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    asana_workspace_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    asana_project_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
@@ -96,6 +110,14 @@ class Webhook(Base):
             "enabled": self.enabled,
             "trigger_events": self.events_list,
             "filters": self.filters,
+            "jira_url": self.jira_url,
+            "jira_email": self.jira_email,
+            "jira_api_token": "***" if self.jira_api_token else None,
+            "jira_project_key": self.jira_project_key,
+            "jira_issue_type": self.jira_issue_type,
+            "asana_token": "***" if self.asana_token else None,
+            "asana_workspace_id": self.asana_workspace_id,
+            "asana_project_id": self.asana_project_id,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "last_triggered_at": self.last_triggered_at.isoformat() if self.last_triggered_at else None,
             "last_trigger_status": self.last_trigger_status,

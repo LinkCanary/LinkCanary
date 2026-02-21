@@ -126,6 +126,157 @@ class WebhookService:
 
         return {"embeds": [embed]}
 
+    def format_jira_payload(self, payload: dict, webhook: Webhook) -> dict:
+        """Format payload for Jira issue creation."""
+        event = payload.get("event", "").replace("_", " ").title()
+        status = payload.get("status", "")
+        summary = payload.get("summary", {})
+        issues = summary.get("issues", {})
+        total_issues = sum(issues.values())
+
+        issue_summary = f"LinkCanary: {payload.get('crawl_name', 'Crawl')} - {event}"
+        issue_description = f"""
+h2. LinkCanary Crawl Report
+
+*Event:* {event}
+*Status:* {status.title()}
+*Sitemap:* {payload.get('sitemap_url', 'N/A')}
+
+h3. Summary
+* Pages Crawled: {summary.get('pages_crawled', 0)}
+* Links Checked: {summary.get('links_checked', 0)}
+* Issues Found: {total_issues}
+** Critical: {issues.get('critical', 0)}
+** High: {issues.get('high', 0)}
+** Medium: {issues.get('medium', 0)}
+** Low: {issues.get('low', 0)}
+
+"""
+        if payload.get("report_url"):
+            issue_description += f"*Report URL:* [{payload['report_url']}|{payload['report_url']}]\n"
+
+        if payload.get("crawl_id"):
+            issue_description += f"*Crawl ID:* {payload['crawl_id']}\n"
+
+        return {
+            "fields": {
+                "project": {"key": webhook.jira_project_key},
+                "summary": issue_summary,
+                "description": issue_description,
+                "issuetype": {"name": webhook.jira_issue_type or "Task"},
+            }
+        }
+
+    def format_asana_payload(self, payload: dict, webhook: Webhook) -> dict:
+        """Format payload for Asana task creation."""
+        event = payload.get("event", "").replace("_", " ").title()
+        status = payload.get("status", "")
+        summary = payload.get("summary", {})
+        issues = summary.get("issues", {})
+        total_issues = sum(issues.values())
+
+        task_name = f"LinkCanary: {payload.get('crawl_name', 'Crawl')} - {event}"
+        task_notes = f"""LinkCanary Crawl Report
+
+Event: {event}
+Status: {status.title()}
+Sitemap: {payload.get('sitemap_url', 'N/A')}
+
+Summary:
+- Pages Crawled: {summary.get('pages_crawled', 0)}
+- Links Checked: {summary.get('links_checked', 0)}
+- Issues Found: {total_issues}
+  - Critical: {issues.get('critical', 0)}
+  - High: {issues.get('high', 0)}
+  - Medium: {issues.get('medium', 0)}
+  - Low: {issues.get('low', 0)}
+"""
+        if payload.get("report_url"):
+            task_notes += f"\nReport URL: {payload['report_url']}\n"
+
+        task_data = {
+            "name": task_name,
+            "notes": task_notes,
+        }
+
+        if webhook.asana_project_id:
+            task_data["projects"] = [webhook.asana_project_id]
+
+        if webhook.asana_workspace_id:
+            task_data["workspace"] = webhook.asana_workspace_id
+
+        return task_data
+
+    def send_jira(self, webhook: Webhook, payload: dict) -> tuple[bool, Optional[str]]:
+        """Send issue to Jira. Returns (success, error_message)."""
+        if not webhook.jira_url or not webhook.jira_api_token:
+            return False, "Jira configuration incomplete (missing URL or API token)"
+
+        try:
+            import base64
+            credentials = f"{webhook.jira_email}:{webhook.jira_api_token}"
+            encoded_credentials = base64.b64encode(credentials.encode()).decode()
+
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Basic {encoded_credentials}",
+            }
+
+            jira_endpoint = f"{webhook.jira_url.rstrip('/')}/rest/api/2/issue"
+            body = self.format_jira_payload(payload, webhook)
+
+            response = requests.post(
+                jira_endpoint,
+                json=body,
+                headers=headers,
+                timeout=self.timeout,
+            )
+
+            if response.status_code in (200, 201):
+                return True, None
+            else:
+                return False, f"HTTP {response.status_code}: {response.text[:200]}"
+
+        except requests.Timeout:
+            return False, "Request timed out"
+        except requests.RequestException as e:
+            return False, str(e)
+        except Exception as e:
+            return False, f"Unexpected error: {str(e)}"
+
+    def send_asana(self, webhook: Webhook, payload: dict) -> tuple[bool, Optional[str]]:
+        """Send task to Asana. Returns (success, error_message)."""
+        if not webhook.asana_token:
+            return False, "Asana configuration incomplete (missing token)"
+
+        try:
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {webhook.asana_token}",
+            }
+
+            asana_endpoint = "https://app.asana.com/api/1.0/tasks"
+            body = {"data": self.format_asana_payload(payload, webhook)}
+
+            response = requests.post(
+                asana_endpoint,
+                json=body,
+                headers=headers,
+                timeout=self.timeout,
+            )
+
+            if response.status_code in (200, 201):
+                return True, None
+            else:
+                return False, f"HTTP {response.status_code}: {response.text[:200]}"
+
+        except requests.Timeout:
+            return False, "Request timed out"
+        except requests.RequestException as e:
+            return False, str(e)
+        except Exception as e:
+            return False, f"Unexpected error: {str(e)}"
+
     def sign_payload(self, payload: dict, secret: str) -> str:
         """Generate HMAC signature for payload."""
         payload_str = json.dumps(payload, separators=(",", ":"))
@@ -142,6 +293,15 @@ class WebhookService:
         payload: dict,
     ) -> tuple[bool, Optional[str]]:
         """Send webhook notification. Returns (success, error_message)."""
+        # Handle Jira integration
+        if webhook.type == WebhookType.JIRA:
+            return self.send_jira(webhook, payload)
+
+        # Handle Asana integration
+        if webhook.type == WebhookType.ASANA:
+            return self.send_asana(webhook, payload)
+
+        # Handle standard webhooks (Slack, Discord, Generic)
         try:
             headers = {
                 "Content-Type": "application/json",

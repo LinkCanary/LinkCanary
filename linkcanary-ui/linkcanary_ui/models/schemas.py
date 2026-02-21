@@ -159,8 +159,8 @@ class BacklinkCheckResponse(BaseModel):
 class WebhookCreate(BaseModel):
     """Request to create a webhook."""
     name: str
-    type: str = Field(description="Webhook type: slack, discord, or generic")
-    url: str
+    type: str = Field(description="Webhook type: slack, discord, generic, jira, or asana")
+    url: str = Field(default="", description="Webhook URL (not needed for jira/asana)")
     secret: Optional[str] = None
     enabled: bool = True
     trigger_events: list[str] = Field(
@@ -171,6 +171,16 @@ class WebhookCreate(BaseModel):
         default=None,
         description="Optional filters like {'min_issues': 5}"
     )
+    # Jira configuration
+    jira_url: Optional[str] = Field(default=None, description="Jira instance URL")
+    jira_email: Optional[str] = Field(default=None, description="Jira user email")
+    jira_api_token: Optional[str] = Field(default=None, description="Jira API token")
+    jira_project_key: Optional[str] = Field(default=None, description="Jira project key")
+    jira_issue_type: Optional[str] = Field(default="Task", description="Jira issue type")
+    # Asana configuration
+    asana_token: Optional[str] = Field(default=None, description="Asana personal access token")
+    asana_workspace_id: Optional[str] = Field(default=None, description="Asana workspace ID")
+    asana_project_id: Optional[str] = Field(default=None, description="Asana project ID")
 
 
 class WebhookUpdate(BaseModel):
@@ -181,6 +191,16 @@ class WebhookUpdate(BaseModel):
     enabled: Optional[bool] = None
     trigger_events: Optional[list[str]] = None
     filters: Optional[dict] = None
+    # Jira configuration
+    jira_url: Optional[str] = None
+    jira_email: Optional[str] = None
+    jira_api_token: Optional[str] = None
+    jira_project_key: Optional[str] = None
+    jira_issue_type: Optional[str] = None
+    # Asana configuration
+    asana_token: Optional[str] = None
+    asana_workspace_id: Optional[str] = None
+    asana_project_id: Optional[str] = None
 
 
 class WebhookResponse(BaseModel):
@@ -193,6 +213,17 @@ class WebhookResponse(BaseModel):
     enabled: bool
     trigger_events: list[str]
     filters: Optional[dict]
+    # Jira configuration
+    jira_url: Optional[str]
+    jira_email: Optional[str]
+    jira_api_token: Optional[str]
+    jira_project_key: Optional[str]
+    jira_issue_type: Optional[str]
+    # Asana configuration
+    asana_token: Optional[str]
+    asana_workspace_id: Optional[str]
+    asana_project_id: Optional[str]
+    # Status fields
     created_at: Optional[datetime]
     last_triggered_at: Optional[datetime]
     last_trigger_status: Optional[str]
