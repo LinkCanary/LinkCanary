@@ -16,6 +16,7 @@ MAX_PAGES="${INPUT_MAX_PAGES:-0}"
 SKIP_OK="${INPUT_SKIP_OK:-true}"
 DELAY="${INPUT_DELAY:-0.5}"
 TIMEOUT="${INPUT_TIMEOUT:-10}"
+IGNORE_ROBOTS="${INPUT_IGNORE_ROBOTS:-false}"
 MAX_RETRIES="${INPUT_MAX_RETRIES:-3}"
 RETRY_DELAY="${INPUT_RETRY_DELAY:-1.0}"
 RETRY_BACKOFF="${INPUT_RETRY_BACKOFF:-2.0}"
@@ -85,6 +86,14 @@ fi
 
 if [ "$SKIP_OK" = "true" ]; then
     ARGS="$ARGS --skip-ok"
+fi
+
+# Robots.txt compliance
+if [ "$IGNORE_ROBOTS" = "true" ]; then
+    ARGS="$ARGS --ignore-robots"
+    echo "Robots.txt: Ignored (override)"
+else
+    echo "Robots.txt: Will be respected"
 fi
 
 # Add authentication options

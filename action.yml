@@ -39,6 +39,10 @@ inputs:
     description: 'Request timeout in seconds'
     required: false
     default: '10'
+  ignore-robots:
+    description: 'Ignore robots.txt rules (not recommended - may get IP banned)'
+    required: false
+    default: 'false'
   max-retries:
     description: 'Max retries for transient errors (502/503/504). Set to 0 to disable.'
     required: false
