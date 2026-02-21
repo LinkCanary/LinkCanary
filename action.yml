@@ -8,8 +8,17 @@ branding:
 
 inputs:
   sitemap-url:
-    description: 'URL to the sitemap.xml file'
-    required: true
+    description: 'URL to the sitemap.xml file (required unless using --url or --urls-file)'
+    required: false
+    default: ''
+  url:
+    description: 'Check a single URL instead of sitemap (for quick CI checks)'
+    required: false
+    default: ''
+  urls-file:
+    description: 'Path to file with URLs to check (one per line). Useful for checking changed pages in PRs.'
+    required: false
+    default: ''
   fail-on-priority:
     description: 'Exit 1 if issues at or above this priority level (critical/high/medium/low/none)'
     required: false

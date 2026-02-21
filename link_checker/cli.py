@@ -46,9 +46,22 @@ def create_parser() -> argparse.ArgumentParser:
         epilog='Example: linkcheck https://example.com/sitemap.xml --internal-only --skip-ok',
     )
     
-    parser.add_argument(
+    # Create mutually exclusive group for input sources
+    input_group = parser.add_mutually_exclusive_group()
+    input_group.add_argument(
         'sitemap_url',
-        help='URL to the sitemap.xml file',
+        nargs='?',
+        help='URL to the sitemap.xml file (optional if using --url or --urls-file)',
+    )
+    input_group.add_argument(
+        '--url',
+        metavar='URL',
+        help='Check a single URL instead of sitemap (for quick CI checks)',
+    )
+    input_group.add_argument(
+        '--urls-file',
+        metavar='FILE',
+        help='Read URLs from a file (one per line). Useful for checking changed pages in PRs.',
     )
     
     parser.add_argument(
@@ -402,27 +415,56 @@ def main(args=None):
         print("Error: Cannot use both --internal-only and --external-only")
         return EXIT_CRAWL_FAILURE
     
-    print(f"Fetching sitemap: {parsed_args.sitemap_url}")
-    
-    sitemap_parser = SitemapParser(
-        user_agent=parsed_args.user_agent,
-        timeout=parsed_args.timeout,
-    )
-    
-    try:
-        page_urls = sitemap_parser.parse_sitemap(
-            parsed_args.sitemap_url,
-            since=parsed_args.since,
+    # Determine input mode
+    if parsed_args.url:
+        # Single URL mode
+        print(f"Single URL mode: {parsed_args.url}")
+        page_urls = [parsed_args.url]
+        base_url = parsed_args.url
+    elif parsed_args.urls_file:
+        # URLs from file mode
+        print(f"Reading URLs from file: {parsed_args.urls_file}")
+        try:
+            with open(parsed_args.urls_file, 'r') as f:
+                page_urls = [line.strip() for line in f if line.strip() and not line.startswith('#')]
+        except FileNotFoundError:
+            print(f"Error: URLs file not found: {parsed_args.urls_file}")
+            return EXIT_CRAWL_FAILURE
+        if not page_urls:
+            print("Error: No URLs found in file")
+            return EXIT_CRAWL_FAILURE
+        print(f"Loaded {len(page_urls)} URLs from file")
+        base_url = page_urls[0] if page_urls else ""
+    else:
+        # Sitemap mode (default)
+        if not parsed_args.sitemap_url:
+            print("Error: Must provide sitemap_url, --url, or --urls-file")
+            parser.print_help()
+            return EXIT_CRAWL_FAILURE
+        
+        print(f"Fetching sitemap: {parsed_args.sitemap_url}")
+        
+        sitemap_parser = SitemapParser(
+            user_agent=parsed_args.user_agent,
+            timeout=parsed_args.timeout,
         )
-    except Exception as e:
-        print(f"Error: Failed to fetch or parse sitemap: {e}")
-        return EXIT_CRAWL_FAILURE
-    finally:
-        sitemap_parser.close()
-    
-    if not page_urls:
-        print("Error: No pages found in sitemap")
-        return EXIT_CRAWL_FAILURE
+        
+        try:
+            page_urls = sitemap_parser.parse_sitemap(
+                parsed_args.sitemap_url,
+                since=parsed_args.since,
+            )
+        except Exception as e:
+            print(f"Error: Failed to fetch or parse sitemap: {e}")
+            return EXIT_CRAWL_FAILURE
+        finally:
+            sitemap_parser.close()
+        
+        if not page_urls:
+            print("Error: No pages found in sitemap")
+            return EXIT_CRAWL_FAILURE
+        
+        base_url = parsed_args.sitemap_url
     
     if parsed_args.max_pages:
         page_urls = page_urls[:parsed_args.max_pages]
@@ -430,7 +472,7 @@ def main(args=None):
     print(f"Found {len(page_urls)} pages to crawl")
     
     crawler = PageCrawler(
-        base_url=parsed_args.sitemap_url,
+        base_url=base_url,
         user_agent=parsed_args.user_agent,
         timeout=parsed_args.timeout,
         delay=parsed_args.delay,
