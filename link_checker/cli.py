@@ -111,6 +111,48 @@ def create_parser() -> argparse.ArgumentParser:
         help='Disable retries for transient errors',
     )
     
+    # Authentication options
+    auth_group = parser.add_argument_group('authentication', 
+        'Options for authenticating with protected sites (staging, etc.)')
+    
+    auth_group.add_argument(
+        '--auth-user',
+        metavar='USERNAME',
+        help='Username for HTTP Basic Authentication',
+    )
+    
+    auth_group.add_argument(
+        '--auth-pass',
+        metavar='PASSWORD',
+        help='Password for HTTP Basic Authentication (use --auth-pass-env for env var)',
+    )
+    
+    auth_group.add_argument(
+        '--auth-pass-env',
+        metavar='ENV_VAR',
+        help='Environment variable name containing the auth password',
+    )
+    
+    auth_group.add_argument(
+        '--header',
+        action='append',
+        dest='headers',
+        default=[],
+        metavar='HEADER',
+        help='Custom header to add to requests. Can be repeated. '
+             'Format: "Name: Value". Example: --header "Authorization: Bearer xxx"',
+    )
+    
+    auth_group.add_argument(
+        '--cookie',
+        action='append',
+        dest='cookies',
+        default=[],
+        metavar='COOKIE',
+        help='Cookie to add to requests. Can be repeated. '
+             'Format: "name=value". Example: --cookie "session=abc123"',
+    )
+    
     parser.add_argument(
         '--internal-only',
         action='store_true',
@@ -440,6 +482,29 @@ def main(args=None):
     # Determine retry settings
     max_retries = 0 if parsed_args.no_retry else parsed_args.max_retries
     
+    # Parse authentication settings
+    auth_user = parsed_args.auth_user
+    auth_pass = parsed_args.auth_pass
+    
+    # Get password from env var if specified
+    if parsed_args.auth_pass_env and not auth_pass:
+        import os
+        auth_pass = os.environ.get(parsed_args.auth_pass_env)
+    
+    # Parse custom headers
+    custom_headers = {}
+    for header in parsed_args.headers:
+        if ':' in header:
+            name, value = header.split(':', 1)
+            custom_headers[name.strip()] = value.strip()
+    
+    # Parse cookies
+    cookies_dict = {}
+    for cookie in parsed_args.cookies:
+        if '=' in cookie:
+            name, value = cookie.split('=', 1)
+            cookies_dict[name.strip()] = value.strip()
+    
     checker = LinkChecker(
         user_agent=parsed_args.user_agent,
         timeout=parsed_args.timeout,
@@ -447,9 +512,24 @@ def main(args=None):
         max_retries=max_retries,
         retry_delay=parsed_args.retry_delay,
         retry_backoff=parsed_args.retry_backoff,
+        auth_user=auth_user,
+        auth_pass=auth_pass,
+        headers=custom_headers if custom_headers else None,
+        cookies=cookies_dict if cookies_dict else None,
     )
     
     print(f"Retry settings: max={max_retries}, delay={parsed_args.retry_delay}s, backoff={parsed_args.retry_backoff}x")
+    
+    # Report auth status (without revealing secrets)
+    if auth_user:
+        print(f"Authentication: Basic auth enabled for user '{auth_user}'")
+    if custom_headers:
+        header_names = list(custom_headers.keys())
+        if 'Authorization' in header_names:
+            header_names[header_names.index('Authorization')] = 'Authorization: ***'
+        print(f"Custom headers: {', '.join(header_names)}")
+    if cookies_dict:
+        print(f"Cookies: {len(cookies_dict)} cookie(s) set")
     
     link_statuses = {}
     

@@ -58,6 +58,23 @@ inputs:
     description: 'Pattern matching type (glob or regex)'
     required: false
     default: 'glob'
+  # Authentication for protected sites
+  auth-user:
+    description: 'Username for HTTP Basic Authentication (for staging sites)'
+    required: false
+    default: ''
+  auth-pass:
+    description: 'Password for HTTP Basic Authentication (use secrets!)'
+    required: false
+    default: ''
+  auth-header:
+    description: 'Custom Authorization header (e.g., "Bearer ${{ secrets.API_TOKEN }}")'
+    required: false
+    default: ''
+  cookie:
+    description: 'Cookie string for authenticated sessions (e.g., "session=abc123")'
+    required: false
+    default: ''
   webhook-url:
     description: 'Optional webhook URL for notifications (Slack/Discord/Generic)'
     required: false
