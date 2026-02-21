@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     default_timeout: int = 10
     default_skip_ok: bool = True
     default_internal_only: bool = False
+
+    webhook_enabled: bool = True
+    webhook_timeout: int = 10
+    webhook_retry_count: int = 3
     
     class Config:
         env_prefix = "LINKCANARY_"

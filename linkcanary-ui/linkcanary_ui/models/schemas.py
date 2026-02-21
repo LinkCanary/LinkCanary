@@ -154,3 +154,73 @@ class BacklinkCheckResponse(BaseModel):
     backlinks_found: int
     sources: list[BacklinkSource]
     total_pages: int
+
+
+class WebhookCreate(BaseModel):
+    """Request to create a webhook."""
+    name: str
+    type: str = Field(description="Webhook type: slack, discord, or generic")
+    url: str
+    secret: Optional[str] = None
+    enabled: bool = True
+    trigger_events: list[str] = Field(
+        default=["crawl_completed"],
+        description="Events: crawl_completed, crawl_failed, issues_found"
+    )
+    filters: Optional[dict] = Field(
+        default=None,
+        description="Optional filters like {'min_issues': 5}"
+    )
+
+
+class WebhookUpdate(BaseModel):
+    """Request to update a webhook."""
+    name: Optional[str] = None
+    url: Optional[str] = None
+    secret: Optional[str] = None
+    enabled: Optional[bool] = None
+    trigger_events: Optional[list[str]] = None
+    filters: Optional[dict] = None
+
+
+class WebhookResponse(BaseModel):
+    """Webhook response schema."""
+    id: str
+    name: str
+    type: str
+    url: str
+    secret: Optional[str]
+    enabled: bool
+    trigger_events: list[str]
+    filters: Optional[dict]
+    created_at: Optional[datetime]
+    last_triggered_at: Optional[datetime]
+    last_trigger_status: Optional[str]
+    trigger_count: int
+
+    class Config:
+        from_attributes = True
+
+
+class WebhookListResponse(BaseModel):
+    """List of webhooks response."""
+    webhooks: list[WebhookResponse]
+    total: int
+
+
+class WebhookTestRequest(BaseModel):
+    """Request to test a webhook."""
+    webhook_id: Optional[str] = None
+    event: str = "crawl_completed"
+
+
+class WebhookPayload(BaseModel):
+    """Webhook payload structure."""
+    event: str
+    crawl_id: str
+    crawl_name: Optional[str] = None
+    sitemap_url: str
+    status: str
+    summary: dict
+    report_url: Optional[str] = None
+    timestamp: str
