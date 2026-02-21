@@ -85,6 +85,33 @@ def create_parser() -> argparse.ArgumentParser:
     )
     
     parser.add_argument(
+        '--max-retries',
+        type=int,
+        default=3,
+        help='Max retries for transient errors 502/503/504 (default: 3)',
+    )
+    
+    parser.add_argument(
+        '--retry-delay',
+        type=float,
+        default=1.0,
+        help='Initial delay between retries in seconds (default: 1.0)',
+    )
+    
+    parser.add_argument(
+        '--retry-backoff',
+        type=float,
+        default=2.0,
+        help='Multiplier for exponential backoff (default: 2.0)',
+    )
+    
+    parser.add_argument(
+        '--no-retry',
+        action='store_true',
+        help='Disable retries for transient errors',
+    )
+    
+    parser.add_argument(
         '--internal-only',
         action='store_true',
         help='Only check internal links',
@@ -410,11 +437,19 @@ def main(args=None):
         print("No links to check")
         return EXIT_SUCCESS
     
+    # Determine retry settings
+    max_retries = 0 if parsed_args.no_retry else parsed_args.max_retries
+    
     checker = LinkChecker(
         user_agent=parsed_args.user_agent,
         timeout=parsed_args.timeout,
         delay=parsed_args.delay / 2,
+        max_retries=max_retries,
+        retry_delay=parsed_args.retry_delay,
+        retry_backoff=parsed_args.retry_backoff,
     )
+    
+    print(f"Retry settings: max={max_retries}, delay={parsed_args.retry_delay}s, backoff={parsed_args.retry_backoff}x")
     
     link_statuses = {}
     
@@ -426,6 +461,13 @@ def main(args=None):
                 pbar.update(1)
     finally:
         checker.close()
+    
+    # Report retry statistics
+    cache_stats = checker.get_cache_stats()
+    if cache_stats['urls_with_retries'] > 0:
+        print(f"\nRetry statistics:")
+        print(f"  URLs that required retries: {cache_stats['urls_with_retries']}")
+        print(f"  Total retry attempts: {cache_stats['total_retries']}")
     
     reporter = ReportGenerator(
         expand_duplicates=parsed_args.expand_duplicates,

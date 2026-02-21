@@ -30,6 +30,18 @@ inputs:
     description: 'Request timeout in seconds'
     required: false
     default: '10'
+  max-retries:
+    description: 'Max retries for transient errors (502/503/504). Set to 0 to disable.'
+    required: false
+    default: '3'
+  retry-delay:
+    description: 'Initial delay between retries in seconds'
+    required: false
+    default: '1.0'
+  retry-backoff:
+    description: 'Multiplier for exponential backoff'
+    required: false
+    default: '2.0'
   format:
     description: 'Export format (csv/json/mdx/xlsx/pdf)'
     required: false
