@@ -27,7 +27,7 @@ def validate_webhook_type(webhook_type: str) -> WebhookType:
     except ValueError:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid webhook type: {webhook_type}. Must be one of: slack, discord, generic"
+            detail=f"Invalid webhook type: {webhook_type}. Must be one of: slack, discord, generic, jira, asana"
         )
 
 
@@ -60,6 +60,16 @@ async def create_webhook(
         enabled=request.enabled,
         trigger_events=",".join(events),
         filters=request.filters,
+        # Jira configuration
+        jira_url=request.jira_url,
+        jira_email=request.jira_email,
+        jira_api_token=request.jira_api_token,
+        jira_project_key=request.jira_project_key,
+        jira_issue_type=request.jira_issue_type,
+        # Asana configuration
+        asana_token=request.asana_token,
+        asana_workspace_id=request.asana_workspace_id,
+        asana_project_id=request.asana_project_id,
     )
 
     db.add(webhook)
@@ -144,6 +154,24 @@ async def update_webhook(
         webhook.trigger_events = ",".join(events)
     if request.filters is not None:
         webhook.filters = request.filters
+    # Jira configuration updates
+    if request.jira_url is not None:
+        webhook.jira_url = request.jira_url
+    if request.jira_email is not None:
+        webhook.jira_email = request.jira_email
+    if request.jira_api_token is not None:
+        webhook.jira_api_token = request.jira_api_token
+    if request.jira_project_key is not None:
+        webhook.jira_project_key = request.jira_project_key
+    if request.jira_issue_type is not None:
+        webhook.jira_issue_type = request.jira_issue_type
+    # Asana configuration updates
+    if request.asana_token is not None:
+        webhook.asana_token = request.asana_token
+    if request.asana_workspace_id is not None:
+        webhook.asana_workspace_id = request.asana_workspace_id
+    if request.asana_project_id is not None:
+        webhook.asana_project_id = request.asana_project_id
 
     await db.commit()
     await db.refresh(webhook)
