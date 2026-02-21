@@ -14,7 +14,20 @@ MAX_PAGES="${INPUT_MAX_PAGES:-0}"
 SKIP_OK="${INPUT_SKIP_OK:-true}"
 DELAY="${INPUT_DELAY:-0.5}"
 TIMEOUT="${INPUT_TIMEOUT:-10}"
+FORMAT="${INPUT_FORMAT:-csv}"
+EXCLUDE_PATTERNS="${INPUT_EXCLUDE_PATTERN:-}"
+INCLUDE_PATTERNS="${INPUT_INCLUDE_PATTERN:-}"
+PATTERN_TYPE="${INPUT_PATTERN_TYPE:-glob}"
 WEBHOOK_URL="${INPUT_WEBHOOK_URL:-}"
+
+# Determine output file extension based on format
+case "$FORMAT" in
+  json)   REPORT_EXT="json" ;;
+  mdx)    REPORT_EXT="mdx" ;;
+  xlsx)   REPORT_EXT="xlsx" ;;
+  pdf)    REPORT_EXT="pdf" ;;
+  *)      REPORT_EXT="csv" ;;
+esac
 
 # Validate required input
 if [ -z "$SITEMAP_URL" ]; then
@@ -24,7 +37,8 @@ fi
 
 # Build command arguments
 ARGS="--fail-on-priority ${FAIL_ON}"
-ARGS="$ARGS --output /output/link_report.csv"
+ARGS="$ARGS --output /output/link_report.${REPORT_EXT}"
+ARGS="$ARGS --format ${FORMAT}"
 ARGS="$ARGS --html-report /output/report.html"
 ARGS="$ARGS --delay ${DELAY}"
 ARGS="$ARGS --timeout ${TIMEOUT}"
@@ -38,37 +52,76 @@ if [ "$SKIP_OK" = "true" ]; then
     ARGS="$ARGS --skip-ok"
 fi
 
+# Add pattern filtering
+if [ -n "$EXCLUDE_PATTERNS" ]; then
+    # Handle multiline input
+  echo "$EXCLUDE_PATTERNS" | while read -r pattern; do
+    if [ -n "$pattern" ]; then
+      ARGS="$ARGS --exclude-pattern \"${pattern}\""
+    fi
+  done
+  # Simpler approach for single patterns
+  PATTERN_COUNT=$(echo "$EXCLUDE_PATTERNS" | grep -c . || echo 0)
+  if [ "$PATTERN_COUNT" -gt 0 ]; then
+    for pattern in $EXCLUDE_PATTERNS; do
+      ARGS="$ARGS --exclude-pattern '${pattern}'"
+    done
+  fi
+fi
+
+if [ -n "$INCLUDE_PATTERNS" ]; then
+  for pattern in $INCLUDE_PATTERNS; do
+    if [ -n "$pattern" ]; then
+      ARGS="$ARGS --include-pattern '${pattern}'"
+    fi
+  done
+fi
+
+if [ "$PATTERN_TYPE" = "regex" ]; then
+    ARGS="$ARGS --pattern-type regex"
+fi
+
 # Run LinkCanary
 echo "Running LinkCanary..."
 echo "Sitemap: ${SITEMAP_URL}"
 echo "Fail on priority: ${FAIL_ON}"
+echo "Format: ${FORMAT}"
+if [ -n "$EXCLUDE_PATTERNS" ]; then
+    echo "Exclude patterns: ${EXCLUDE_PATTERNS}"
+fi
+if [ -n "$INCLUDE_PATTERNS" ]; then
+    echo "Include patterns: ${INCLUDE_PATTERNS}"
+fi
 
 cd /linkcanary
 linkcheck "${SITEMAP_URL}" $ARGS
 EXIT_CODE=$?
 
 # Copy reports to GitHub workspace if available
-REPORT_PATH="/output/link_report.csv"
+REPORT_PATH="/output/link_report.${REPORT_EXT}"
 if [ -n "$GITHUB_WORKSPACE" ] && [ -f "$REPORT_PATH" ]; then
-    cp "$REPORT_PATH" "$GITHUB_WORKSPACE/link_report.csv" 2>/dev/null || true
+    cp "$REPORT_PATH" "$GITHUB_WORKSPACE/link_report.${REPORT_EXT}" 2>/dev/null || true
     cp /output/report.html "$GITHUB_WORKSPACE/report.html" 2>/dev/null || true
-    REPORT_PATH="$GITHUB_WORKSPACE/link_report.csv"
+    REPORT_PATH="$GITHUB_WORKSPACE/link_report.${REPORT_EXT}"
 fi
 
-# Parse issue counts from CSV for outputs
+# Parse issue counts from report for outputs
 CRITICAL_COUNT=0
 HIGH_COUNT=0
 MEDIUM_COUNT=0
 LOW_COUNT=0
 TOTAL_ISSUES=0
 
+# Parse from CSV (still generate CSV for stats even if different format requested)
 if [ -f "/output/link_report.csv" ]; then
-    # Skip header, count by priority
     TOTAL_ISSUES=$(tail -n +2 /output/link_report.csv | wc -l | tr -d ' ')
     CRITICAL_COUNT=$(tail -n +2 /output/link_report.csv | grep -c ',critical,' 2>/dev/null || echo 0)
     HIGH_COUNT=$(tail -n +2 /output/link_report.csv | grep -c ',high,' 2>/dev/null || echo 0)
     MEDIUM_COUNT=$(tail -n +2 /output/link_report.csv | grep -c ',medium,' 2>/dev/null || echo 0)
     LOW_COUNT=$(tail -n +2 /output/link_report.csv | grep -c ',low,' 2>/dev/null || echo 0)
+elif [ -f "/output/link_report.json" ]; then
+    # Parse from JSON if CSV not available
+    TOTAL_ISSUES=$(grep -o '"total_issues": [0-9]*' /output/link_report.json | grep -o '[0-9]*' || echo 0)
 fi
 
 # Set GitHub Actions outputs
