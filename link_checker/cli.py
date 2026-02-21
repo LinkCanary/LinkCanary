@@ -10,7 +10,9 @@ from tqdm import tqdm
 from . import __version__
 from .checker import LinkChecker
 from .crawler import PageCrawler
+from .exporters import ExportFormat, ReportExporter, detect_format
 from .html_reporter import HTMLReportGenerator
+from .patterns import URLPatternMatcher, create_matcher_from_args
 from .reporter import ReportGenerator
 from .sitemap import SitemapParser
 
@@ -56,6 +58,19 @@ def create_parser() -> argparse.ArgumentParser:
     )
     
     parser.add_argument(
+        '-f', '--format',
+        choices=['csv', 'json', 'mdx', 'xlsx', 'pdf'],
+        default=None,
+        help='Export format (auto-detected from output extension if not specified)',
+    )
+    
+    parser.add_argument(
+        '--google-sheets',
+        action='store_true',
+        help='Export to Google Sheets (requires GOOGLE_APPLICATION_CREDENTIALS)',
+    )
+    
+    parser.add_argument(
         '-d', '--delay',
         type=float,
         default=0.5,
@@ -79,6 +94,31 @@ def create_parser() -> argparse.ArgumentParser:
         '--external-only',
         action='store_true',
         help='Only check external links',
+    )
+    
+    parser.add_argument(
+        '--exclude-pattern',
+        action='append',
+        default=[],
+        metavar='PATTERN',
+        help='Exclude URLs matching pattern (glob or regex). Can be repeated. '
+             'Example: --exclude-pattern "*linkedin.com*" --exclude-pattern "*.pdf"',
+    )
+    
+    parser.add_argument(
+        '--include-pattern',
+        action='append',
+        default=[],
+        metavar='PATTERN',
+        help='Only check URLs matching pattern (glob or regex). Can be repeated. '
+             'Example: --include-pattern "/blog/*" --include-pattern "/docs/*"',
+    )
+    
+    parser.add_argument(
+        '--pattern-type',
+        choices=['glob', 'regex'],
+        default='glob',
+        help='Pattern matching type (default: glob)',
     )
     
     parser.add_argument(
@@ -347,6 +387,25 @@ def main(args=None):
     unique_urls = list(set(link.link_url for link in all_links))
     print(f"Extracted {len(all_links)} links ({len(unique_urls)} unique)")
     
+    # Apply URL pattern filtering
+    pattern_matcher = create_matcher_from_args(parsed_args)
+    if pattern_matcher.include_patterns or pattern_matcher.exclude_patterns:
+        included_urls, excluded_urls = pattern_matcher.filter_urls(unique_urls)
+        
+        print(f"\nPattern filtering ({parsed_args.pattern_type}):")
+        if pattern_matcher.exclude_patterns:
+            print(f"  Exclude patterns: {pattern_matcher.exclude_patterns}")
+            print(f"  Excluded: {len(excluded_urls)} URLs")
+        if pattern_matcher.include_patterns:
+            print(f"  Include patterns: {pattern_matcher.include_patterns}")
+        print(f"  URLs to check: {len(included_urls)}")
+        
+        unique_urls = included_urls
+        
+        if not unique_urls:
+            print("No URLs match the patterns")
+            return EXIT_SUCCESS
+    
     if not unique_urls:
         print("No links to check")
         return EXIT_SUCCESS
@@ -375,12 +434,30 @@ def main(args=None):
     
     df = reporter.generate_report(all_links, link_statuses)
     
-    reporter.save_report(df, parsed_args.output)
-    
     summary = reporter.get_summary(df)
-    print_summary(summary, ci_mode=parsed_args.ci)
     
-    print(f"\nReport saved to: {parsed_args.output}")
+    # Determine export format
+    export_format = parsed_args.format or detect_format(parsed_args.output)
+    
+    # Create exporter and save report
+    exporter = ReportExporter(df, summary)
+    
+    try:
+        if parsed_args.google_sheets:
+            import os
+            creds_path = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
+            sheets_url = exporter.export_google_sheets(credentials_path=creds_path)
+            print(f"\nGoogle Sheets URL: {sheets_url}")
+        else:
+            exporter.export(parsed_args.output, format=export_format)
+            print(f"\nReport saved to: {parsed_args.output} ({export_format})")
+    except ImportError as e:
+        print(f"Warning: {e}")
+        print("Falling back to CSV format...")
+        exporter.export_csv(parsed_args.output)
+        print(f"\nReport saved to: {parsed_args.output} (csv)")
+    
+    print_summary(summary, ci_mode=parsed_args.ci)
     
     if parsed_args.html_report:
         html_reporter = HTMLReportGenerator()

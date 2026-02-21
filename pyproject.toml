@@ -32,6 +32,28 @@ dependencies = [
     "urllib3>=1.26.0",
 ]
 
+[project.optional-dependencies]
+export = [
+    "openpyxl>=3.0.0",
+    "xlsxwriter>=3.0.0",
+    "reportlab>=3.6.0",
+]
+pdf = ["weasyprint>=60.0"]
+sheets = [
+    "google-api-python-client>=2.0.0",
+    "google-auth>=2.0.0",
+    "google-auth-oauthlib>=1.0.0",
+]
+all = [
+    "openpyxl>=3.0.0",
+    "xlsxwriter>=3.0.0",
+    "reportlab>=3.6.0",
+    "weasyprint>=60.0",
+    "google-api-python-client>=2.0.0",
+    "google-auth>=2.0.0",
+    "google-auth-oauthlib>=1.0.0",
+]
+
 [project.scripts]
 linkcheck = "link_checker.cli:main"
 linkcheck-report = "link_checker.report_cli:main"

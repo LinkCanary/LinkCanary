@@ -30,6 +30,22 @@ inputs:
     description: 'Request timeout in seconds'
     required: false
     default: '10'
+  format:
+    description: 'Export format (csv/json/mdx/xlsx/pdf)'
+    required: false
+    default: 'csv'
+  exclude-pattern:
+    description: 'Exclude URLs matching pattern (newline-separated). E.g., *linkedin.com*, *.pdf'
+    required: false
+    default: ''
+  include-pattern:
+    description: 'Only check URLs matching pattern (newline-separated). E.g., /blog/*, /docs/*'
+    required: false
+    default: ''
+  pattern-type:
+    description: 'Pattern matching type (glob or regex)'
+    required: false
+    default: 'glob'
   webhook-url:
     description: 'Optional webhook URL for notifications (Slack/Discord/Generic)'
     required: false
@@ -47,7 +63,7 @@ outputs:
   low-count:
     description: 'Low priority count'
   report-path:
-    description: 'Path to CSV report'
+    description: 'Path to report file'
 
 runs:
   using: 'docker'
