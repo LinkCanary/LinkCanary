@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from . import __version__
-from .api import backlinks, crawls, reports, settings as settings_api, stats, websocket
+from .api import backlinks, crawls, reports, settings as settings_api, stats, websocket, webhooks
 from .config import settings
 from .models import init_db
 
@@ -48,6 +48,7 @@ app.include_router(reports.router)
 app.include_router(stats.router)
 app.include_router(settings_api.router)
 app.include_router(websocket.router)
+app.include_router(webhooks.router)
 
 static_dir = Path(__file__).parent / "static"
 if static_dir.exists():

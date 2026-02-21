@@ -19,6 +19,7 @@ from link_checker.sitemap import SitemapParser
 
 from ..config import settings
 from ..models import Crawl, CrawlStatus
+from ..services.webhooks import webhook_service
 
 sync_db_url = settings.db_url.replace("+aiosqlite", "")
 sync_engine = create_engine(sync_db_url)
@@ -29,6 +30,38 @@ _running_tasks = {}
 def get_sync_session():
     """Get synchronous database session."""
     return Session(sync_engine)
+
+
+def trigger_webhooks(session, crawl: Crawl, event: str):
+    """Trigger webhooks for a crawl event."""
+    if not settings.webhook_enabled:
+        return
+
+    summary = {
+        "pages_crawled": crawl.pages_crawled,
+        "links_checked": crawl.links_checked,
+        "issues": {
+            "critical": crawl.issues_critical,
+            "high": crawl.issues_high,
+            "medium": crawl.issues_medium,
+            "low": crawl.issues_low,
+        },
+    }
+
+    report_url = None
+    if crawl.report_html_path:
+        report_url = f"http://{settings.host}:{settings.port}/crawls/{crawl.id}"
+
+    webhook_service.trigger_webhooks(
+        session=session,
+        event=event,
+        crawl_id=crawl.id,
+        sitemap_url=crawl.sitemap_url,
+        status=crawl.status.value,
+        summary=summary,
+        crawl_name=crawl.name,
+        report_url=report_url,
+    )
 
 
 def run_crawl_in_background(crawl_id: str):
@@ -210,7 +243,9 @@ def _run_crawl_sync(crawl_id: str):
         crawl.status = CrawlStatus.COMPLETED
         crawl.completed_at = datetime.utcnow()
         session.commit()
-        
+
+        trigger_webhooks(session, crawl, "crawl_completed")
+
         return {
             "status": "completed",
             "pages_crawled": crawl.pages_crawled,
@@ -228,7 +263,8 @@ def _run_crawl_sync(crawl_id: str):
             crawl.error_message = str(e)
             crawl.completed_at = datetime.utcnow()
             session.commit()
-        
+            trigger_webhooks(session, crawl, "crawl_failed")
+
         return {"error": str(e)}
     
     finally:
