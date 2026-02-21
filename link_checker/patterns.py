@@ -94,23 +94,49 @@ class URLPatternMatcher:
     def _glob_match(self, url: str, pattern: str) -> bool:
         """
         Match URL against glob pattern.
-        
+
         Supports:
         - * matches any characters (non-greedy)
         - ** matches any characters across path segments
         - ? matches single character
         - [abc] character sets
+
+        Pattern types:
+        - Domain patterns: *linkedin.com* (wraps with wildcards)
+        - Path patterns: /blog/*, /docs/**/*.md
+        - Extension patterns: *.pdf, *.jpg
         """
-        # Normalize pattern and URL for matching
         pattern_lower = pattern.lower()
         url_lower = url.lower()
-        
-        # Handle domain patterns like *linkedin.com*
-        if "*" in pattern:
-            # Use fnmatch for glob-style matching
+
+        # Path pattern: starts with / - match against URL path
+        if pattern.startswith('/'):
+            parsed = urlparse(url)
+            path = parsed.path.lower()
+            # Use fnmatch on the path
+            return fnmatch.fnmatch(path, pattern_lower) or pattern_lower in path
+
+        # Full wildcard pattern: *something* - match anywhere in URL
+        if pattern.startswith('*') and pattern.endswith('*'):
+            # Remove wildcards and check if contained
+            search = pattern_lower.strip('*')
+            return search in url_lower
+
+        # Prefix wildcard: *something - check suffix
+        if pattern.startswith('*'):
+            suffix = pattern_lower[1:]
+            return url_lower.endswith(suffix) or suffix in url_lower
+
+        # Suffix wildcard: something* - check prefix or extension
+        if pattern.endswith('*'):
+            prefix = pattern_lower[:-1]
+            return url_lower.startswith(prefix) or prefix in url_lower
+
+        # Has wildcard in middle: something*something
+        if '*' in pattern:
             return fnmatch.fnmatch(url_lower, pattern_lower)
-        
-        # Exact match
+
+        # No wildcards: substring match
         return pattern_lower in url_lower
 
     def filter_urls(self, urls: List[str]) -> tuple[List[str], List[str]]:
