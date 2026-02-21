@@ -56,6 +56,64 @@ That's it. LinkCanary will crawl every page in your sitemap, check every link on
 
 ---
 
+## Comparison: LinkCanary vs Screaming Frog vs Lychee
+
+**TL;DR:** Screaming Frog is a desktop SEO crawler. Lychee is a fast Rust link checker. LinkCanary is **automation infrastructure**—built for CI/CD, webhooks, and occurrence tracking that tells you *where* to fix, not just *what* is broken.
+
+| Feature | LinkCanary | Screaming Frog | Lychee |
+|---------|------------|----------------|--------|
+| **Runtime** | CLI + Docker + GitHub Actions | Desktop GUI only | CLI only |
+| **CI/CD Integration** | ✅ Native GitHub Action, fails builds | ❌ Requires manual export/import | ⚠️ Basic exit codes, no GitHub Action |
+| **Free Tier Limits** | Unlimited URLs | 500 URLs max | Unlimited URLs |
+| **Occurrence Tracking** | ✅ "Broken link X appears on 12 pages" | ❌ Lists URLs only | ❌ Lists URLs only |
+| **Priority Classification** | ✅ Critical/High/Medium/Low | ⚠️ Basic issue types | ❌ No priority levels |
+| **Webhook Alerts** | ✅ Slack, Discord, Jira, Asana | ❌ None | ❌ None |
+| **Export Formats** | CSV, JSON, Excel, PDF, MDX, Google Sheets | CSV, XLSX, PDF | JSON, HTML |
+| **Staging Site Auth** | ✅ Basic Auth, Bearer tokens, Cookies | ⚠️ Manual config per crawl | ❌ Limited auth support |
+| **Single URL Mode** | ✅ Fast PR checks (`--url`) | ❌ Full crawl only | ✅ Yes |
+| **Retry Logic** | ✅ Exponential backoff (502/503/504) | ❌ Single attempt | ⚠️ Basic retries |
+| **robots.txt Compliance** | ✅ Respects by default | ✅ Yes | ❌ Ignores |
+| **JavaScript Rendering** | ⚠️ Planned | ✅ Yes | ❌ No |
+| **Crawl Speed** | Fast (Python/async) | Medium (desktop limited) | **Fastest** (Rust) |
+| **Pricing** | Free (Open Source) | £149/year | Free |
+
+### When to use which:
+
+**Choose Screaming Frog if...**
+- You're an SEO analyst doing deep technical audits (hreflang, canonical analysis, log file analysis)
+- You need JavaScript rendering for SPAs
+- You prefer GUI visualization over automation
+- **Limitation:** Can't run in CI/CD, can't trigger webhooks, manual exports only
+
+**Choose Lychee if...**
+- You need a *fast* link checker for huge sites (100k+ URLs)
+- You want a simple "pass/fail" binary result
+- You don't need to know *which pages* contain the broken link
+- **Limitation:** No occurrence data, no workflow integrations, basic reporting
+
+**Choose LinkCanary if...**
+- You want **CI/CD integration** (fail builds on broken links before deployment)
+- You need to **track where broken links appear** (occurrence count) for efficient fixing
+- You want **webhook alerts** (Slack notification when production site breaks)
+- You manage **staging environments** with authentication (basic auth, bearer tokens)
+- You export reports for **content teams** (Excel, PDF, MDX for Ghost CMS)
+- You want **smart retry logic** (distinguishes real 404s from temporary 503s)
+
+### The Automation Gap
+
+Screaming Frog is an *audit tool*. Lychee is a *checker*. LinkCanary is **infrastructure** that prevents broken links from reaching production and notifies you when external sites break yours.
+
+| Workflow | Screaming Frog | Lychee | LinkCanary |
+|----------|---------------|--------|------------|
+| **PR Review** | Export CSV → Email → Fix later | Terminal output only | 🟢 **Auto-fail build, comment PR with occurrence data** |
+| **Production Monitoring** | Manual monthly crawl | Not designed for it | 🟢 **Scheduled checks + Slack alerts** |
+| **Team Assignment** | Export to Sheets, assign manually | N/A | 🟢 **Auto-create Jira/Asana tickets** |
+| **Staging Checks** | Requires desktop + manual auth config | Limited auth | 🟢 **Built-in auth headers, runs in CI** |
+
+**Pro tip:** Many teams use **Lychee for speed** in large monorepos and **LinkCanary for intelligence** in critical content workflows. They're complementary, not competitors.
+
+---
+
 ## Usage
 
 ### Command Line
