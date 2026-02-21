@@ -243,11 +243,11 @@ def check_priority_threshold(summary: dict, fail_on: str) -> bool:
 
     Returns True if build should fail (issues at or above threshold).
 
-    Priority levels (lower = more severe):
-    - critical = 0
-    - high = 1
+    Priority levels (higher = more severe):
+    - critical = 4
+    - high = 3
     - medium = 2
-    - low = 3
+    - low = 1
 
     fail_on='high' will fail if critical OR high issues exist.
     """
@@ -263,20 +263,22 @@ def check_priority_threshold(summary: dict, fail_on: str) -> bool:
         )
         return total > 0
 
-    priority_levels = {'critical': 0, 'high': 1, 'medium': 2, 'low': 3}
-    threshold = priority_levels.get(fail_on, 0)
+    priority_order = {'critical': 4, 'high': 3, 'medium': 2, 'low': 1}
+    threshold = priority_order.get(fail_on, 0)
 
-    # Fail if any priority level is <= threshold (more severe or equal)
-    if summary.get('critical', 0) > 0 and 0 <= threshold:
-        return True
-    if summary.get('high', 0) > 0 and 1 <= threshold:
-        return True
-    if summary.get('medium', 0) > 0 and 2 <= threshold:
-        return True
-    if summary.get('low', 0) > 0 and 3 <= threshold:
-        return True
+    # Find the max priority among existing issues
+    max_issue_priority = 0
+    if summary.get('critical', 0) > 0:
+        max_issue_priority = 4
+    if summary.get('high', 0) > 0:
+        max_issue_priority = max(max_issue_priority, 3)
+    if summary.get('medium', 0) > 0:
+        max_issue_priority = max(max_issue_priority, 2)
+    if summary.get('low', 0) > 0:
+        max_issue_priority = max(max_issue_priority, 1)
 
-    return False
+    # Fail if max issue priority >= threshold
+    return max_issue_priority >= threshold
 
 
 def main(args=None):
