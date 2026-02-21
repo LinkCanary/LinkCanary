@@ -14,6 +14,7 @@ from .exporters import ExportFormat, ReportExporter, detect_format
 from .html_reporter import HTMLReportGenerator
 from .patterns import URLPatternMatcher, create_matcher_from_args
 from .reporter import ReportGenerator
+from .robots import RobotsComplianceChecker
 from .sitemap import SitemapParser
 
 EXIT_SUCCESS = 0
@@ -238,6 +239,12 @@ def create_parser() -> argparse.ArgumentParser:
         '--include-subdomains',
         action='store_true',
         help='Treat subdomains as internal links',
+    )
+    
+    parser.add_argument(
+        '--ignore-robots',
+        action='store_true',
+        help='Ignore robots.txt rules (not recommended)',
     )
     
     parser.add_argument(
@@ -471,11 +478,26 @@ def main(args=None):
     
     print(f"Found {len(page_urls)} pages to crawl")
     
+    # Initialize robots.txt compliance checker
+    robots_checker = RobotsComplianceChecker(
+        user_agent=parsed_args.user_agent,
+        timeout=parsed_args.timeout,
+        ignore_robots=parsed_args.ignore_robots,
+    )
+    
+    # Check robots.txt for crawl delay and apply
+    crawl_delay = robots_checker.get_crawl_delay(base_url)
+    if crawl_delay and crawl_delay > parsed_args.delay:
+        print(f"Robots.txt crawl-delay: {crawl_delay}s (overriding --delay {parsed_args.delay}s)")
+        effective_delay = crawl_delay
+    else:
+        effective_delay = parsed_args.delay
+    
     crawler = PageCrawler(
         base_url=base_url,
         user_agent=parsed_args.user_agent,
         timeout=parsed_args.timeout,
-        delay=parsed_args.delay,
+        delay=effective_delay,
         include_subdomains=parsed_args.include_subdomains,
     )
     
@@ -484,11 +506,25 @@ def main(args=None):
     try:
         with tqdm(total=len(page_urls), desc="Crawling pages", unit="page") as pbar:
             for url in page_urls:
+                # Check robots.txt before crawling
+                is_allowed, reason = robots_checker.check_url(url, base_url)
+                if not is_allowed:
+                    pbar.update(1)
+                    continue
+                
                 links = crawler.crawl_page(url)
                 all_links.extend(links)
                 pbar.update(1)
     finally:
         crawler.close()
+    
+    # Report robots.txt stats
+    robots_stats = robots_checker.get_stats()
+    if robots_stats['urls_skipped'] > 0:
+        print(f"\nRobots.txt compliance:")
+        print(f"  URLs skipped: {robots_stats['urls_skipped']}")
+        if parsed_args.ignore_robots:
+            print(f"  (ignored due to --ignore-robots)")
     
     if parsed_args.internal_only:
         all_links = [link for link in all_links if link.is_internal]
@@ -516,6 +552,16 @@ def main(args=None):
         if not unique_urls:
             print("No URLs match the patterns")
             return EXIT_SUCCESS
+    
+    # Apply robots.txt filtering for links to check
+    # (We already filtered pages to crawl, this filters the destination URLs)
+    if not parsed_args.ignore_robots:
+        allowed_urls, skipped_urls = robots_checker.filter_urls(unique_urls, base_url)
+        if skipped_urls:
+            print(f"\nRobots.txt link filtering:")
+            print(f"  Links skipped: {len(skipped_urls)}")
+            print(f"  Links to check: {len(allowed_urls)}")
+            unique_urls = allowed_urls
     
     if not unique_urls:
         print("No links to check")
