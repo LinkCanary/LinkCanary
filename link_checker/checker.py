@@ -25,6 +25,9 @@ class LinkStatus:
     is_loop: bool = False
     is_canonical_redirect: bool = False
     error: str = ''
+    retries: int = 0  # Number of retries needed for transient errors
+    is_canonical_redirect: bool = False
+    error: str = ''
     
     @property
     def redirect_chain_formatted(self) -> str:
@@ -35,15 +38,28 @@ class LinkStatus:
 class LinkChecker:
     """Checks link status and traces redirect chains."""
     
+    # Status codes that trigger retry
+    RETRY_STATUS_CODES = {502, 503, 504}
+    # Default retry settings
+    DEFAULT_MAX_RETRIES = 3
+    DEFAULT_RETRY_DELAY = 1.0  # seconds
+    DEFAULT_RETRY_BACKOFF = 2.0  # multiplier
+    
     def __init__(
         self,
         user_agent: str = 'LinkCanary/1.0',
         timeout: int = 10,
         delay: float = 0.1,
+        max_retries: int = 3,
+        retry_delay: float = 1.0,
+        retry_backoff: float = 2.0,
     ):
         self.user_agent = user_agent
         self.timeout = timeout
         self.delay = delay
+        self.max_retries = max_retries
+        self.retry_delay = retry_delay
+        self.retry_backoff = retry_backoff
         
         self.session = requests.Session()
         self.session.headers.update({
@@ -55,6 +71,7 @@ class LinkChecker:
         self._head_blacklist: set[str] = set()
         self._host_delays: dict[str, float] = {}
         self._last_request_time: dict[str, float] = {}
+        self._retry_stats: dict[str, int] = {}  # Track retry counts per URL
     
     def _get_host_delay(self, url: str) -> float:
         """Get the current delay for a host."""
@@ -121,17 +138,72 @@ class LinkChecker:
         except requests.RequestException:
             return None
     
-    def _check_single_url(self, url: str) -> tuple[int, str, Optional[str]]:
+    def _make_request_with_retry(
+        self,
+        url: str,
+        method: str = 'HEAD',
+        allow_redirects: bool = False,
+    ) -> tuple[Optional[requests.Response], int]:
+        """
+        Make an HTTP request with retry logic for transient errors.
+        
+        Retries on:
+        - 502 Bad Gateway
+        - 503 Service Unavailable
+        - 504 Gateway Timeout
+        
+        Uses exponential backoff between retries.
+        
+        Returns:
+            Tuple of (response, retry_count)
+        """
+        retry_count = 0
+        current_delay = self.retry_delay
+        
+        while retry_count <= self.max_retries:
+            response = self._make_request(url, method, allow_redirects)
+            
+            # No response (timeout/connection error) - might be transient
+            if response is None:
+                if retry_count < self.max_retries:
+                    retry_count += 1
+                    logger.debug(f"Retrying {url} (attempt {retry_count}/{self.max_retries}) - no response")
+                    time.sleep(current_delay)
+                    current_delay *= self.retry_backoff
+                    continue
+                return None, retry_count
+            
+            # Success or non-retryable status
+            if response.status_code not in self.RETRY_STATUS_CODES:
+                return response, retry_count
+            
+            # Retryable server error (502/503/504)
+            if retry_count < self.max_retries:
+                retry_count += 1
+                logger.debug(
+                    f"Retrying {url} (attempt {retry_count}/{self.max_retries}) - "
+                    f"status {response.status_code}"
+                )
+                time.sleep(current_delay)
+                current_delay *= self.retry_backoff
+            else:
+                # Max retries reached, return the error response
+                return response, retry_count
+        
+        return response, retry_count
+    
+    def _check_single_url(self, url: str) -> tuple[int, str, Optional[str], int]:
         """
         Check a single URL's status without following redirects.
         
         Returns:
-            Tuple of (status_code, redirect_location or '', error_message or None)
+            Tuple of (status_code, redirect_location or '', error_message or None, retry_count)
         """
         use_get = self._should_use_get(url)
+        retry_count = 0
         
         if not use_get:
-            response = self._make_request(url, 'HEAD', allow_redirects=False)
+            response, retry_count = self._make_request_with_retry(url, 'HEAD', allow_redirects=False)
             
             if response is not None:
                 if response.status_code in (403, 405, 501):
@@ -139,29 +211,29 @@ class LinkChecker:
                     use_get = True
                 else:
                     location = response.headers.get('Location', '')
-                    return response.status_code, location, None
+                    return response.status_code, location, None, retry_count
         
         if use_get or response is None:
-            response = self._make_request(url, 'GET', allow_redirects=False)
+            response, retry_count = self._make_request_with_retry(url, 'GET', allow_redirects=False)
         
         if response is None:
-            return 0, '', 'Request failed (timeout or connection error)'
+            return 0, '', 'Request failed (timeout or connection error)', retry_count
         
         if response.status_code == 429:
             self._increase_host_delay(url)
             time.sleep(self._get_host_delay(url))
-            response = self._make_request(url, 'GET', allow_redirects=False)
+            response, retry_count = self._make_request_with_retry(url, 'GET', allow_redirects=False)
             
             if response is None or response.status_code == 429:
                 self._increase_host_delay(url)
                 time.sleep(self._get_host_delay(url))
-                response = self._make_request(url, 'GET', allow_redirects=False)
+                response, retry_count = self._make_request_with_retry(url, 'GET', allow_redirects=False)
                 
                 if response is None or response.status_code == 429:
-                    return 429, '', 'Rate limited after retries'
+                    return 429, '', 'Rate limited after retries', retry_count
         
         location = response.headers.get('Location', '')
-        return response.status_code, location, None
+        return response.status_code, location, None, retry_count
     
     def check_link(self, url: str) -> LinkStatus:
         """
@@ -181,6 +253,7 @@ class LinkChecker:
         current_url = url
         is_loop = False
         error = ''
+        total_retries = 0
         
         for _ in range(MAX_REDIRECTS + 1):
             if current_url in visited:
@@ -188,7 +261,8 @@ class LinkChecker:
                 break
             
             visited.add(current_url)
-            status_code, location, req_error = self._check_single_url(current_url)
+            status_code, location, req_error, retry_count = self._check_single_url(current_url)
+            total_retries += retry_count
             
             if req_error:
                 error = req_error
@@ -231,6 +305,7 @@ class LinkChecker:
             is_loop=is_loop,
             is_canonical_redirect=is_canonical,
             error=error,
+            retries=total_retries,
         )
         
         self._cache[url] = result
@@ -264,10 +339,15 @@ class LinkChecker:
     
     def get_cache_stats(self) -> dict:
         """Get cache statistics."""
+        total_retries = sum(status.retries for status in self._cache.values())
+        urls_with_retries = sum(1 for status in self._cache.values() if status.retries > 0)
+        
         return {
             'cached_urls': len(self._cache),
             'head_blacklisted_hosts': len(self._head_blacklist),
             'hosts_with_custom_delay': len(self._host_delays),
+            'total_retries': total_retries,
+            'urls_with_retries': urls_with_retries,
         }
     
     def close(self):
