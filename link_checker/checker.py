@@ -26,8 +26,6 @@ class LinkStatus:
     is_canonical_redirect: bool = False
     error: str = ''
     retries: int = 0  # Number of retries needed for transient errors
-    is_canonical_redirect: bool = False
-    error: str = ''
     
     @property
     def redirect_chain_formatted(self) -> str:
@@ -53,6 +51,10 @@ class LinkChecker:
         max_retries: int = 3,
         retry_delay: float = 1.0,
         retry_backoff: float = 2.0,
+        auth_user: Optional[str] = None,
+        auth_pass: Optional[str] = None,
+        headers: Optional[dict] = None,
+        cookies: Optional[dict] = None,
     ):
         self.user_agent = user_agent
         self.timeout = timeout
@@ -60,12 +62,28 @@ class LinkChecker:
         self.max_retries = max_retries
         self.retry_delay = retry_delay
         self.retry_backoff = retry_backoff
+        self.auth_user = auth_user
+        self.auth_pass = auth_pass
+        self.custom_headers = headers or {}
+        self.cookies = cookies
         
         self.session = requests.Session()
         self.session.headers.update({
             'User-Agent': self.user_agent,
             'Accept': '*/*',
         })
+        
+        # Add custom headers
+        if self.custom_headers:
+            self.session.headers.update(self.custom_headers)
+        
+        # Add basic auth
+        if self.auth_user and self.auth_pass:
+            self.session.auth = (self.auth_user, self.auth_pass)
+        
+        # Add cookies
+        if self.cookies:
+            self.session.cookies.update(self.cookies)
         
         self._cache: dict[str, LinkStatus] = {}
         self._head_blacklist: set[str] = set()

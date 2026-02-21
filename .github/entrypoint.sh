@@ -21,6 +21,11 @@ FORMAT="${INPUT_FORMAT:-csv}"
 EXCLUDE_PATTERNS="${INPUT_EXCLUDE_PATTERN:-}"
 INCLUDE_PATTERNS="${INPUT_INCLUDE_PATTERN:-}"
 PATTERN_TYPE="${INPUT_PATTERN_TYPE:-glob}"
+# Authentication options
+AUTH_USER="${INPUT_AUTH_USER:-}"
+AUTH_PASS="${INPUT_AUTH_PASS:-}"
+AUTH_HEADER="${INPUT_AUTH_HEADER:-}"
+COOKIE="${INPUT_COOKIE:-}"
 WEBHOOK_URL="${INPUT_WEBHOOK_URL:-}"
 
 # Determine output file extension based on format
@@ -56,6 +61,23 @@ fi
 
 if [ "$SKIP_OK" = "true" ]; then
     ARGS="$ARGS --skip-ok"
+fi
+
+# Add authentication options
+if [ -n "$AUTH_USER" ] && [ -n "$AUTH_PASS" ]; then
+    ARGS="$ARGS --auth-user \"${AUTH_USER}\""
+    ARGS="$ARGS --auth-pass \"${AUTH_PASS}\""
+    echo "Authentication: Basic auth enabled for user '${AUTH_USER}'"
+fi
+
+if [ -n "$AUTH_HEADER" ]; then
+    ARGS="$ARGS --header \"Authorization: ${AUTH_HEADER}\""
+    echo "Authentication: Custom auth header set"
+fi
+
+if [ -n "$COOKIE" ]; then
+    ARGS="$ARGS --cookie \"${COOKIE}\""
+    echo "Authentication: Cookie set"
 fi
 
 # Add pattern filtering
