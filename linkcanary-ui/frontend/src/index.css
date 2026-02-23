@@ -1,9 +1,39 @@
 @import "tailwindcss";
 
+/* Font declarations */
+@font-face {
+  font-family: 'Space Grotesk';
+  src: url('/fonts/SpaceGrotesk-Variable.woff2') format('woff2-variations');
+  font-weight: 300 700;
+  font-display: swap;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Libre Franklin';
+  src: url('/fonts/LibreFranklin-Variable.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-display: swap;
+  font-style: normal;
+}
+
+/* Theme configuration */
 @theme {
   --color-primary: #CAFFD0;
   --color-secondary: #C9E4E7;
   --color-dark: #1E1014;
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-body: 'Libre Franklin', system-ui, sans-serif;
 }
 
 @custom-variant dark (&:where(.dark, .dark *));
+
+/* Base styles */
+body {
+  font-family: var(--font-body);
+  font-weight: 400;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+}

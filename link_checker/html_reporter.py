@@ -223,6 +223,23 @@ const summaryData = {summary_json};
     def _get_css(self) -> str:
         """Return the CSS styles."""
         return '''
+/* Font declarations */
+@font-face {
+    font-family: 'Space Grotesk';
+    src: url('https://fonts.gstatic.com/s/spacegrotesk/v17/V8mDoQDjQSkFtoOM3t69g-9HcWAHPKgJUaYnTafqjJw.woff2') format('woff2');
+    font-weight: 300 700;
+    font-display: swap;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'Libre Franklin';
+    src: url('https://fonts.gstatic.com/s/librefranklin/v19/jizMRFIVpkdWo4C8f2DrHkUfUwPibOJDNXDIbSak.woff2') format('woff2');
+    font-weight: 100 900;
+    font-display: swap;
+    font-style: normal;
+}
+
 :root {
     --critical: #DC2626;
     --high: #EA580C;
@@ -235,6 +252,8 @@ const summaryData = {summary_json};
     --text: #111827;
     --text-secondary: #6B7280;
     --border: #E5E7EB;
+    --font-display: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-body: 'Libre Franklin', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 * {
@@ -244,7 +263,7 @@ const summaryData = {summary_json};
 }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-family: var(--font-body);
     background: var(--bg);
     color: var(--text);
     line-height: 1.5;
@@ -258,6 +277,7 @@ body {
 }
 
 .header h1 {
+    font-family: var(--font-display);
     font-size: 2rem;
     margin-bottom: 0.5rem;
 }
