@@ -5,6 +5,7 @@ const navItems = [
   { path: '/', label: 'Dashboard' },
   { path: '/crawl/new', label: 'New Crawl' },
   { path: '/backlinks', label: 'Backlink Checker' },
+  { path: '/url-resolution', label: 'URL Resolution' },
   { path: '/reports', label: 'Reports' },
   { path: '/settings', label: 'Settings' },
 ];

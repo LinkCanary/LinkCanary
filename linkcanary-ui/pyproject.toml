@@ -46,6 +46,10 @@ dev = [
     "pytest-asyncio>=0.23.0",
     "httpx>=0.26.0",
 ]
+reporting = [
+    "weasyprint>=53.0; platform_system != 'Windows'",
+    "pillow>=9.0.0",
+]
 
 [project.scripts]
 linkcanary-ui = "linkcanary_ui.main:cli"
@@ -59,4 +63,4 @@ where = ["."]
 include = ["linkcanary_ui*"]
 
 [tool.setuptools.package-data]
-"*" = ["static/*", "static/**/*"]
+"*" = ["static/*", "static/**/*", "templates/*", "templates/**/*"]

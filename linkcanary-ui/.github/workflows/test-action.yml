@@ -1,0 +1,35 @@
+name: Test LinkCanary Action
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Test Action with Public Site
+        id: test
+        uses: ./
+        with:
+          sitemap-url: 'https://httpbin.org/html'
+          max-pages: '5'
+          fail-on-priority: 'none'
+          skip-ok: 'true'
+      
+      - name: Verify Outputs
+        run: |
+          echo "Total issues: ${{ steps.test.outputs.total-issues }}"
+          echo "Critical: ${{ steps.test.outputs.critical-count }}"
+          echo "High: ${{ steps.test.outputs.high-count }}"
+          echo "Medium: ${{ steps.test.outputs.medium-count }}"
+          echo "Report path: ${{ steps.test.outputs.report-path }}"
+          echo "Exit code: ${{ steps.test.outputs.exit-code }}"
+          
+          # Verify report file exists
+          if [ -f "${{ steps.test.outputs.report-path }}" ]; then
+            echo "✅ Report file exists"
+            head -5 "${{ steps.test.outputs.report-path }}"
+          else
+            echo "❌ Report file not found"
+            exit 1
+          fi

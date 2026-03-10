@@ -200,6 +200,7 @@ linkcanary-ui
 | `--since` | none | Only crawl pages modified after date (YYYY-MM-DD) |
 | `--html-report` | none | Generate HTML report at specified path |
 | `--open` | `false` | Open HTML report in browser after generation |
+| `--test-urls URL [URL ...]` | none | Diagnostic: test URL resolution against given base URLs |
 
 ---
 
@@ -228,6 +229,50 @@ LinkCanary outputs a CSV (and optionally an interactive HTML report) with the fo
 | `2` | Crawl failure (couldn't fetch sitemap or fatal error) |
 
 Exit codes make it easy to integrate LinkCanary into CI/CD pipelines — fail the build if broken links are introduced.
+
+---
+
+## WordPress / Blog Subdirectory Support
+
+LinkCanary correctly handles sites hosted under subdirectory paths like `/blog/`, `/docs/`, or `/app/`. This is critical for WordPress sites, Ghost blogs, and documentation portals that live under a path prefix.
+
+### How It Works
+
+- **Proper URL resolution** — Relative URLs like `href="post-name/"` are resolved against the current page URL (e.g., `https://example.com/blog/my-post/`), preserving the `/blog/` prefix
+- **`<base>` tag support** — The crawler respects `<base href="...">` HTML tags that WordPress and other CMS platforms use to set a custom base URL for relative links
+- **No path stripping** — LinkCanary never strips subdirectory prefixes during URL normalization, preventing false positive 404 errors
+
+### URL Resolution Diagnostics
+
+Use the `--test-urls` flag to verify how LinkCanary resolves relative URLs against your site's base URLs:
+
+```bash
+# Test URL resolution for a blog subdirectory
+linkcheck --test-urls https://example.com/blog/2024/01/my-post/
+
+# Test multiple URLs at once
+linkcheck --test-urls https://example.com/blog/ https://example.com/docs/api/
+```
+
+Output:
+
+```
+URL Resolution Test: https://example.com/blog/2024/01/my-post/
+============================================================
+Href                                Resolved URL
+----------------------------------- --------------------------------------------------
+/blog/post-name/                    https://example.com/blog/post-name/
+relative-page/                      https://example.com/blog/2024/01/my-post/relative-page/
+../other-page/                      https://example.com/blog/2024/01/other-page/
+/about/                             https://example.com/about/
+//cdn.example.com/asset.js          https://cdn.example.com/asset.js
+https://external.com/page           https://external.com/page
+
+============================================================
+All URLs resolved correctly. No subdirectory stripping detected.
+```
+
+The **Web UI** also includes a URL Resolution Tester (under Tools > URL Resolution) for interactive testing without the CLI.
 
 ---
 

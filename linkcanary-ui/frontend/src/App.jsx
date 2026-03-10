@@ -8,6 +8,7 @@ import Reports from './pages/Reports';
 import ReportViewer from './pages/ReportViewer';
 import Settings from './pages/Settings';
 import BacklinkChecker from './pages/BacklinkChecker';
+import UrlResolution from './pages/UrlResolution';
 
 export default function App() {
   return (
@@ -21,6 +22,7 @@ export default function App() {
             <Route path="/reports" element={<Reports />} />
             <Route path="/report/:id" element={<ReportViewer />} />
             <Route path="/backlinks" element={<BacklinkChecker />} />
+            <Route path="/url-resolution" element={<UrlResolution />} />
             <Route path="/settings" element={<Settings />} />
           </Routes>
         </Layout>

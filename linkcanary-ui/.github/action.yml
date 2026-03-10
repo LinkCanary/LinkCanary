@@ -1,0 +1,66 @@
+name: 'LinkCanary'
+description: 'Broken link detection for CI/CD with occurrence tracking and priority-based failing'
+author: 'chesterbeard'
+branding:
+  icon: 'link'
+  color: 'orange'
+
+inputs:
+  sitemap-url:
+    description: 'URL to sitemap.xml or path to local sitemap file'
+    required: true
+  fail-on-priority:
+    description: 'Minimum priority to fail build (critical/high/medium/low/none)'
+    required: false
+    default: 'high'
+  max-pages:
+    description: 'Limit pages to crawl (0 for unlimited)'
+    required: false
+    default: '0'
+  skip-ok:
+    description: 'Skip 200 OK links in report'
+    required: false
+    default: 'true'
+  delay:
+    description: 'Seconds between requests (rate limiting)'
+    required: false
+    default: '0.5'
+  timeout:
+    description: 'Request timeout in seconds'
+    required: false
+    default: '10'
+  auth-user:
+    description: 'Username for HTTP Basic Auth (staging sites)'
+    required: false
+  auth-pass:
+    description: 'Password for HTTP Basic Auth'
+    required: false
+  webhook-url:
+    description: 'Webhook URL for notifications (Slack/Discord/generic)'
+    required: false
+  internal-only:
+    description: 'Check only internal links'
+    required: false
+    default: 'false'
+  include-subdomains:
+    description: 'Treat subdomains as internal'
+    required: false
+    default: 'false'
+
+outputs:
+  total-issues:
+    description: 'Total number of issues found'
+  critical-count:
+    description: 'Number of critical priority issues'
+  high-count:
+    description: 'Number of high priority issues'
+  medium-count:
+    description: 'Number of medium priority issues'
+  report-path:
+    description: 'Path to generated CSV report'
+  exit-code:
+    description: 'Exit code from link check (0=clean, 1=failed)'
+
+runs:
+  using: 'docker'
+  image: 'Dockerfile'

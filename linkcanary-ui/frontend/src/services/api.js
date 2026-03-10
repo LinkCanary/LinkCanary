@@ -69,6 +69,13 @@ export const backlinksApi = {
   }),
 };
 
+export const urlResolutionApi = {
+  test: (data) => fetchJson(`${API_BASE}/url-resolution/test`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+};
+
 export function createCrawlWebSocket(crawlId, onMessage, onError, onClose) {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const wsUrl = `${protocol}//${window.location.host}/ws/crawl/${crawlId}`;
