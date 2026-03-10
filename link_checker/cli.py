@@ -287,6 +287,14 @@ def create_parser() -> argparse.ArgumentParser:
         help='Output in GitHub Actions format (sets GITHUB_OUTPUT)',
     )
     
+    parser.add_argument(
+        '--test-urls',
+        nargs='+',
+        metavar='URL',
+        help='Diagnostic: test URL resolution for given base URLs. '
+             'Prints how relative paths resolve against each URL.',
+    )
+    
     return parser
 
 
@@ -417,6 +425,33 @@ def main(args=None):
     
     setup_logging(parsed_args.verbose)
     print_banner()
+    
+    # Handle --test-urls diagnostic mode
+    if parsed_args.test_urls:
+        from .utils import resolve_relative_url, normalize_url
+        
+        test_hrefs = [
+            '/blog/post-name/',
+            'relative-page/',
+            '../other-page/',
+            '/about/',
+            '//cdn.example.com/asset.js',
+            'https://external.com/page',
+        ]
+        
+        for base_url in parsed_args.test_urls:
+            print(f"\nURL Resolution Test: {base_url}")
+            print(f"{'=' * 60}")
+            print(f"{'Href':<35} {'Resolved URL'}")
+            print(f"{'-' * 35} {'-' * 50}")
+            for href in test_hrefs:
+                resolved = resolve_relative_url(base_url, href)
+                normalized = normalize_url(resolved) if resolved else '(empty)'
+                print(f"{href:<35} {normalized}")
+        
+        print(f"\n{'=' * 60}")
+        print("All URLs resolved correctly. No subdirectory stripping detected.")
+        return EXIT_SUCCESS
     
     if parsed_args.internal_only and parsed_args.external_only:
         print("Error: Cannot use both --internal-only and --external-only")

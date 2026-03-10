@@ -86,44 +86,9 @@ class PageCrawler:
             logger.warning(f"Failed to fetch {url}: {e}")
             return None
     
-    def _resolve_and_append(
-        self,
-        links: list,
-        page_url: str,
-        base_url: str,
-        href: str,
-        link_text: str,
-        element_type: str,
-    ):
-        """Resolve a URL and append it to the links list if valid."""
-        if should_skip_link(href):
-            return
-        
-        absolute_url = resolve_relative_url(base_url, href)
-        
-        if not absolute_url or not is_valid_http_url(absolute_url):
-            return
-        
-        is_internal = is_internal_link(
-            absolute_url,
-            self.base_url,
-            self.include_subdomains,
-        )
-        
-        links.append(ExtractedLink(
-            source_url=page_url,
-            link_url=absolute_url,
-            link_text=link_text,
-            is_internal=is_internal,
-            element_type=element_type,
-        ))
-    
     def extract_links(self, page_url: str, html: str) -> list[ExtractedLink]:
         """
         Extract all links from HTML content.
-        
-        Extracts links from <a href>, <img src>, <link href>,
-        and <script src> tags.
         
         Args:
             page_url: The URL of the page (for resolving relative URLs)
@@ -153,40 +118,122 @@ class PageCrawler:
         
         for anchor in soup.find_all('a', href=True):
             href = anchor.get('href', '').strip()
+            
+            if should_skip_link(href):
+                continue
+            
+            absolute_url = resolve_relative_url(base_url, href)
+            
+            if not absolute_url or not is_valid_http_url(absolute_url):
+                continue
+            
             link_text = anchor.get_text(strip=True)[:200]
-            self._resolve_and_append(links, page_url, base_url, href, link_text, 'a')
+            
+            is_internal = is_internal_link(
+                absolute_url,
+                self.base_url,
+                self.include_subdomains,
+            )
+            
+            links.append(ExtractedLink(
+                source_url=page_url,
+                link_url=absolute_url,
+                link_text=link_text,
+                is_internal=is_internal,
+                element_type='a',
+            ))
         
+        # Extract <img src="..."> tags
         for img in soup.find_all('img', src=True):
             src = img.get('src', '').strip()
-            alt_text = img.get('alt', '')[:200]
-            self._resolve_and_append(links, page_url, base_url, src, alt_text, 'img')
+            
+            if should_skip_link(src):
+                continue
+            
+            absolute_url = resolve_relative_url(base_url, src)
+            
+            if not absolute_url or not is_valid_http_url(absolute_url):
+                continue
+            
+            link_text = img.get('alt', '').strip()[:200]
+            
+            is_internal = is_internal_link(
+                absolute_url,
+                self.base_url,
+                self.include_subdomains,
+            )
+            
+            links.append(ExtractedLink(
+                source_url=page_url,
+                link_url=absolute_url,
+                link_text=link_text,
+                is_internal=is_internal,
+                element_type='img',
+            ))
         
+        # Extract <link href="..."> tags
         for link_tag in soup.find_all('link', href=True):
             href = link_tag.get('href', '').strip()
-            rel = link_tag.get('rel', [])
-            rel_text = ' '.join(rel) if isinstance(rel, list) else str(rel)
-            self._resolve_and_append(links, page_url, base_url, href, rel_text[:200], 'link')
+            
+            if should_skip_link(href):
+                continue
+            
+            absolute_url = resolve_relative_url(base_url, href)
+            
+            if not absolute_url or not is_valid_http_url(absolute_url):
+                continue
+            
+            link_text = link_tag.get('rel', [''])
+            if isinstance(link_text, list):
+                link_text = ' '.join(link_text)
+            link_text = link_text.strip()[:200]
+            
+            is_internal = is_internal_link(
+                absolute_url,
+                self.base_url,
+                self.include_subdomains,
+            )
+            
+            links.append(ExtractedLink(
+                source_url=page_url,
+                link_url=absolute_url,
+                link_text=link_text,
+                is_internal=is_internal,
+                element_type='link',
+            ))
         
+        # Extract <script src="..."> tags
         for script in soup.find_all('script', src=True):
             src = script.get('src', '').strip()
-            self._resolve_and_append(links, page_url, base_url, src, '', 'script')
+            
+            if should_skip_link(src):
+                continue
+            
+            absolute_url = resolve_relative_url(base_url, src)
+            
+            if not absolute_url or not is_valid_http_url(absolute_url):
+                continue
+            
+            is_internal = is_internal_link(
+                absolute_url,
+                self.base_url,
+                self.include_subdomains,
+            )
+            
+            links.append(ExtractedLink(
+                source_url=page_url,
+                link_url=absolute_url,
+                link_text='',
+                is_internal=is_internal,
+                element_type='script',
+            ))
         
         return links
     
     def crawl_page(self, url: str) -> list[ExtractedLink]:
-        """
-        Crawl a single page and extract all links.
-        
-        Args:
-            url: The page URL to crawl
-        
-        Returns:
-            List of ExtractedLink objects
-        """
         html = self.fetch_page(url)
         if html is None:
             return []
-        
         return self.extract_links(url, html)
     
     def crawl_pages(
@@ -194,25 +241,12 @@ class PageCrawler:
         urls: list[str],
         progress_callback=None,
     ) -> list[ExtractedLink]:
-        """
-        Crawl multiple pages and extract all links.
-        
-        Args:
-            urls: List of page URLs to crawl
-            progress_callback: Optional callback for progress updates
-        
-        Returns:
-            List of all ExtractedLink objects from all pages
-        """
         all_links = []
-        
         for i, url in enumerate(urls):
             links = self.crawl_page(url)
             all_links.extend(links)
-            
             if progress_callback:
                 progress_callback(i + 1, len(urls), url, len(links))
-        
         return all_links
     
     def close(self):

@@ -1,8 +1,8 @@
 """Backlink checker API endpoints."""
 
-import re
 from urllib.parse import urljoin, urlparse
 
+from bs4 import BeautifulSoup
 from fastapi import APIRouter, HTTPException
 from requests import RequestException
 
@@ -12,53 +12,80 @@ from ..models.schemas import (
     BacklinkSource,
 )
 from link_checker.sitemap import SitemapParser
+from link_checker.utils import normalize_url
 
 router = APIRouter(prefix="/api/backlinks", tags=["backlinks"])
 
 
-def normalize_url(url: str) -> str:
-    """Normalize URL for comparison."""
+def _normalize_for_comparison(url: str) -> str:
+    """Normalize URL for backlink comparison (adds scheme if missing)."""
     url = url.strip()
     if url.startswith('//'):
         url = 'https:' + url
     elif not url.startswith(('http://', 'https://')):
         url = 'https://' + url
-    return url.rstrip('/')
+    return normalize_url(url)
 
 
-def contains_link(html: str, target_url: str) -> tuple[bool, str | None]:
-    """Check if HTML contains a link to target URL and extract link text."""
-    target_normalized = normalize_url(target_url)
+def contains_link(
+    html: str,
+    target_url: str,
+    source_url: str | None = None,
+) -> tuple[bool, str | None]:
+    """Check if HTML contains a link to target URL and extract link text.
     
-    # Match href attributes with the target URL
-    # Look for both exact matches and partial matches (path variations)
-    href_pattern = r'<a\b[^>]*\bhref\s*=\s*["\']([^"\']+)["\'][^>]*>(.*?)</a>'
-    matches = re.finditer(href_pattern, html, re.IGNORECASE | re.DOTALL)
+    Uses BeautifulSoup for robust HTML parsing and respects <base href>
+    tags for resolving relative URLs (important for WordPress/blog
+    subdirectory sites).
     
-    for match in matches:
-        link_url = match.group(1)
-        link_text = match.group(2).strip()
+    Args:
+        html: The HTML content to search
+        target_url: The URL to look for in links
+        source_url: The URL of the page (used to resolve relative links)
+    """
+    target_normalized = _normalize_for_comparison(target_url)
+    
+    try:
+        soup = BeautifulSoup(html, 'lxml')
+    except Exception:
+        return False, None
+    
+    effective_base = source_url
+    if source_url:
+        base_tag = soup.find('base', href=True)
+        if base_tag:
+            base_href = base_tag['href'].strip()
+            if base_href:
+                effective_base = urljoin(source_url, base_href)
+    
+    for anchor in soup.find_all('a', href=True):
+        href = anchor.get('href', '').strip()
+        if not href:
+            continue
+        
+        link_text = anchor.get_text(separator=' ', strip=True)
         
         try:
-            # Resolve relative URLs and compare
-            parsed_link = urlparse(link_url)
+            parsed_link = urlparse(href)
             if not parsed_link.scheme:
-                # This is a relative URL, we'd need the base URL to resolve it
-                # For now, skip relative URLs as we can't determine the target without context
-                continue
+                if effective_base is None:
+                    continue
+                link_url = urljoin(effective_base, href)
+                parsed_link = urlparse(link_url)
+                if not parsed_link.scheme:
+                    continue
+            else:
+                link_url = href
             
-            link_normalized = normalize_url(link_url)
+            link_normalized = _normalize_for_comparison(link_url)
             
-            # Check if the URLs match (either exact or path-only match)
             if link_normalized == target_normalized:
                 return True, link_text
             
-            # Also check for path-only match (ignoring trailing slashes)
             target_path = urlparse(target_normalized).path
             link_path = urlparse(link_normalized).path
             
             if target_path.rstrip('/') == link_path.rstrip('/'):
-                # Verify the domain matches the target
                 target_domain = urlparse(target_normalized).netloc
                 link_domain = urlparse(link_normalized).netloc
                 if target_domain == link_domain:
@@ -79,8 +106,8 @@ async def check_backlinks(request: BacklinkCheckRequest):
     )
     
     sources = []
-    target_url = normalize_url(request.target_url)
-    sitemap_url = normalize_url(request.sitemap_url)
+    target_url = _normalize_for_comparison(request.target_url)
+    sitemap_url = _normalize_for_comparison(request.sitemap_url)
     
     try:
         # Parse the sitemap to get pages to check
@@ -117,7 +144,9 @@ async def check_backlinks(request: BacklinkCheckRequest):
             )
             
             if response.status_code == 200:
-                found, link_text = contains_link(response.text, target_url)
+                found, link_text = contains_link(
+                    response.text, target_url, source_url=page_url,
+                )
                 backlinks_found += 1 if found else 0
                 
                 sources.append(BacklinkSource(

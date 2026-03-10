@@ -1,0 +1,66 @@
+name: LinkCanary Crawl
+
+on:
+  workflow_dispatch:
+    inputs:
+      sitemap-url:
+        description: 'URL to sitemap.xml'
+        required: true
+      fail-on-priority:
+        description: 'Minimum priority to fail build (critical/high/medium/low/none)'
+        required: false
+        default: 'high'
+      max-pages:
+        description: 'Limit crawl depth (0 = unlimited)'
+        required: false
+        default: '0'
+      skip-ok:
+        description: 'Exclude 200 OK from reports'
+        required: false
+        default: 'true'
+      delay:
+        description: 'Seconds between requests'
+        required: false
+        default: '0.5'
+      auth-user:
+        description: 'Username for basic auth'
+        required: false
+      auth-pass:
+        description: 'Password for basic auth'
+        required: false
+
+jobs:
+  test:
+    name: Run LinkCanary Crawl
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e .
+        
+    - name: Run LinkCanary crawl
+      run: |
+        echo "Running LinkCanary crawl with:"
+        echo "Sitemap URL: ${{ inputs.sitemap-url }}"
+        echo "Fail on priority: ${{ inputs.fail-on-priority }}"
+        echo "Max pages: ${{ inputs.max-pages }}"
+        echo "Skip OK: ${{ inputs.skip-ok }}"
+        echo "Delay: ${{ inputs.delay }}"
+        
+        # Add your LinkCanary crawl command here
+        # Example: linkcanary crawl ${{ inputs.sitemap-url }} --fail-on ${{ inputs.fail-on-priority }} --max-pages ${{ inputs.max-pages }} --skip-ok ${{ inputs.skip-ok }} --delay ${{ inputs.delay }}
+        
+        if [ -n "${{ inputs.auth-user }}" ] && [ -n "${{ inputs.auth-pass }}" ]; then
+          echo "Using basic auth with user: ${{ inputs.auth-user }}"
+          # Add auth parameters to your command
+        fi

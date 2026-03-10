@@ -255,3 +255,26 @@ class WebhookPayload(BaseModel):
     summary: dict
     report_url: Optional[str] = None
     timestamp: str
+
+
+class UrlResolutionRequest(BaseModel):
+    """Request to test URL resolution."""
+    base_urls: list[str] = Field(..., description="Base URLs to test resolution against", min_length=1)
+    custom_hrefs: list[str] = Field(default=[], description="Additional custom hrefs to test")
+
+
+class ResolvedUrl(BaseModel):
+    """Single resolved URL result."""
+    href: str
+    resolved_url: str
+
+
+class UrlResolutionResult(BaseModel):
+    """Resolution results for a single base URL."""
+    base_url: str
+    resolutions: list[ResolvedUrl]
+
+
+class UrlResolutionResponse(BaseModel):
+    """Response from URL resolution test."""
+    results: list[UrlResolutionResult]

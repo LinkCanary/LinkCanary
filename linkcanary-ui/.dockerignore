@@ -1,0 +1,60 @@
+# Docker ignore file for LinkCanary Action
+
+# Node modules
+node_modules/
+frontend/node_modules/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+
+# IDE files
+.vscode/
+.idea/
+
+# Git files
+git/
+.git/
+
+# Build artifacts
+dist/
+build/
+
+# Test files
+*.test.*
+
+# Coverage files
+coverage/
+.htmlcov
+
+# Environment files
+.env
+.env.*
+
+# Logs
+logs/
+*.log
+
+# Cache directories
+.cache/
+
+# Documentation
+*.md
+
+# Frontend build artifacts
+frontend/dist/
+frontend/.vite-temp/
+
+# Static files (will be copied from package)
+static/
+
+# Misc
+.DS_Store
+*.swp
+*.swo

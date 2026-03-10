@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from . import __version__
-from .api import backlinks, crawls, reports, settings as settings_api, stats, websocket, webhooks
+from .api import backlinks, crawls, reports, settings as settings_api, stats, url_resolution, websocket, webhooks
 from .config import settings
 from .models import init_db
 
@@ -49,6 +49,7 @@ app.include_router(stats.router)
 app.include_router(settings_api.router)
 app.include_router(websocket.router)
 app.include_router(webhooks.router)
+app.include_router(url_resolution.router)
 
 static_dir = Path(__file__).parent / "static"
 if static_dir.exists():
@@ -125,6 +126,40 @@ def cli():
         version=f"linkcanary-ui {__version__}",
     )
     
+    # White Label Report Options
+    report_group = parser.add_argument_group('White Label Report Options')
+    report_group.add_argument(
+        '--white-label-logo',
+        help='Path to client logo image (PNG/SVG)',
+        default=None
+    )
+    report_group.add_argument(
+        '--white-label-color',
+        default='#2563eb',
+        help='Primary brand color (hex code)'
+    )
+    report_group.add_argument(
+        '--white-label-title',
+        default='Link Audit Report',
+        help='Custom report title'
+    )
+    report_group.add_argument(
+        '--white-label-client',
+        help='Client name for report header',
+        default=None
+    )
+    report_group.add_argument(
+        '--output-format',
+        choices=['html', 'pdf'],
+        default='html',
+        help='Report format (html or pdf)'
+    )
+    report_group.add_argument(
+        '--generate-report',
+        action='store_true',
+        help='Generate a white-label report'
+    )
+    
     args = parser.parse_args()
     
     if args.data_dir:
@@ -142,6 +177,68 @@ Server: http://{args.host}:{args.port}
 Data:   {settings.data_dir}
 {'=' * 40}
 """)
+    
+    if args.generate_report:
+        from datetime import datetime
+        from linkcanary_ui.report_generator import create_white_label_report
+        
+        # Mock data for demonstration - in real implementation, this would come from crawl results
+        report_data = {
+            'site_url': 'https://example.com',
+            'crawl_date': datetime.now(),
+            'total_links': 150,
+            'broken_links': 12,
+            'redirect_links': 8,
+            'ok_links': 130,
+            'issues_by_type': {
+                '404 Not Found': 12,
+                '500 Server Error': 3,
+                'Redirect Chain': 5,
+                'Slow Response': 7
+            },
+            'detailed_issues': [
+                {
+                    'url': 'https://example.com/broken-page',
+                    'status': '404',
+                    'issue_type': 'Broken Link',
+                    'priority': 'high',
+                    'details': 'Page not found'
+                },
+                {
+                    'url': 'https://example.com/redirect-chain',
+                    'status': '301',
+                    'issue_type': 'Redirect Chain',
+                    'priority': 'medium',
+                    'details': 'Multiple redirects detected'
+                }
+            ]
+        }
+        
+        output_path = f"linkcanary_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        if args.output_format == 'pdf':
+            output_path += '.pdf'
+        else:
+            output_path += '.html'
+        
+        result = create_white_label_report(
+            site_url=report_data['site_url'],
+            crawl_date=report_data['crawl_date'],
+            total_links=report_data['total_links'],
+            broken_links=report_data['broken_links'],
+            redirect_links=report_data['redirect_links'],
+            ok_links=report_data['ok_links'],
+            issues_by_type=report_data['issues_by_type'],
+            detailed_issues=report_data['detailed_issues'],
+            logo_path=args.white_label_logo,
+            brand_color=args.white_label_color,
+            report_title=args.white_label_title,
+            client_name=args.white_label_client,
+            output_format=args.output_format,
+            output_path=output_path
+        )
+        
+        print(f"✅ Report generated successfully: {result}")
+        return
     
     if args.open:
         webbrowser.open(f"http://{args.host}:{args.port}")
