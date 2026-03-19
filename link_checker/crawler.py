@@ -26,6 +26,7 @@ class ExtractedLink:
     link_text: str
     is_internal: bool
     element_type: str = field(default='a')
+    is_mixed_content: bool = False
 
 
 class PageCrawler:
@@ -109,13 +110,23 @@ class PageCrawler:
             self.base_url,
             self.include_subdomains,
         )
-        
+
+        # Detect mixed content: HTTP resource loaded on an HTTPS page.
+        # Only applies to passive/active resource elements (img, script, link,
+        # iframe), NOT to <a> navigation links which browsers allow freely.
+        is_mixed_content = (
+            element_type != 'a'
+            and page_url.startswith('https://')
+            and absolute_url.startswith('http://')
+        )
+
         links.append(ExtractedLink(
             source_url=page_url,
             link_url=absolute_url,
             link_text=link_text,
             is_internal=is_internal,
             element_type=element_type,
+            is_mixed_content=is_mixed_content,
         ))
     
     def extract_links(self, page_url: str, html: str) -> list[ExtractedLink]:

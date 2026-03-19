@@ -2,18 +2,20 @@ import { useState, useEffect } from 'react';
 import Card, { CardBody, CardHeader } from '../components/Card';
 import Button from '../components/Button';
 import Input, { Checkbox } from '../components/Input';
-import { settingsApi } from '../services/api';
+import { settingsApi, webhooksApi } from '../services/api';
 
 export default function Settings() {
   const [settings, setSettings] = useState(null);
+  const [webhooks, setWebhooks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  
+
   useEffect(() => {
     loadSettings();
+    loadWebhooks();
   }, []);
-  
+
   async function loadSettings() {
     try {
       const data = await settingsApi.get();
@@ -24,16 +26,38 @@ export default function Settings() {
       setLoading(false);
     }
   }
-  
+
+  async function loadWebhooks() {
+    try {
+      const data = await webhooksApi.list();
+      setWebhooks(data);
+    } catch (err) {
+      console.error('Failed to load webhooks:', err);
+    }
+  }
+
   function updateSetting(key, value) {
     setSettings((prev) => ({ ...prev, [key]: value }));
     setSaved(false);
   }
-  
+
+  function updateWebhook(type, key, value) {
+    const existingWebhook = webhooks.find((w) => w.type === type);
+    if (existingWebhook) {
+      setWebhooks((prev) =>
+        prev.map((w) => (w.type === type ? { ...w, [key]: value } : w))
+      );
+    } else {
+      setWebhooks((prev) => [...prev, { type, [key]: value }]);
+    }
+    setSaved(false);
+  }
+
   async function handleSave() {
     setSaving(true);
     try {
       await settingsApi.update(settings);
+      await handleSaveWebhooks();
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (err) {
@@ -42,7 +66,17 @@ export default function Settings() {
       setSaving(false);
     }
   }
-  
+
+  async function handleSaveWebhooks() {
+    for (const webhook of webhooks) {
+      if (webhook.id) {
+        await webhooksApi.update(webhook.id, webhook);
+      } else {
+        await webhooksApi.create(webhook);
+      }
+    }
+  }
+
   if (loading) {
     return (
       <div className="text-center py-12">
@@ -50,10 +84,74 @@ export default function Settings() {
       </div>
     );
   }
-  
+
+  const asanaSettings = webhooks.find((w) => w.type === 'asana') || {};
+  const jiraSettings = webhooks.find((w) => w.type === 'jira') || {};
+
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
+
+      <Card>
+        <CardHeader>
+          <h2 className="text-lg font-semibold text-gray-900">Integrations</h2>
+          <p className="text-sm text-gray-500">Configure integrations with other services.</p>
+        </CardHeader>
+        <CardBody className="space-y-6">
+          <div>
+            <h3 className="text-md font-semibold text-gray-900 mb-2">Asana</h3>
+            <div className="space-y-4">
+              <Input
+                label="Asana Personal Access Token"
+                type="password"
+                value={asanaSettings.asana_token || ''}
+                onChange={(e) => updateWebhook('asana', 'asana_token', e.target.value)}
+              />
+              <Input
+                label="Asana Workspace ID"
+                value={asanaSettings.asana_workspace_id || ''}
+                onChange={(e) => updateWebhook('asana', 'asana_workspace_id', e.target.value)}
+              />
+              <Input
+                label="Asana Project ID"
+                value={asanaSettings.asana_project_id || ''}
+                onChange={(e) => updateWebhook('asana', 'asana_project_id', e.target.value)}
+              />
+            </div>
+          </div>
+          <div>
+            <h3 className="text-md font-semibold text-gray-900 mb-2">Jira</h3>
+            <div className="space-y-4">
+              <Input
+                label="Jira Instance URL"
+                value={jiraSettings.jira_url || ''}
+                onChange={(e) => updateWebhook('jira', 'jira_url', e.target.value)}
+              />
+              <Input
+                label="Jira User Email"
+                value={jiraSettings.jira_email || ''}
+                onChange={(e) => updateWebhook('jira', 'jira_email', e.target.value)}
+              />
+              <Input
+                label="Jira API Token"
+                type="password"
+                value={jiraSettings.jira_api_token || ''}
+                onChange={(e) => updateWebhook('jira', 'jira_api_token', e.target.value)}
+              />
+              <Input
+                label="Jira Project Key"
+                value={jiraSettings.jira_project_key || ''}
+                onChange={(e) => updateWebhook('jira', 'jira_project_key', e.target.value)}
+              />
+              <Input
+                label="Jira Issue Type"
+                value={jiraSettings.jira_issue_type || 'Task'}
+                onChange={(e) => updateWebhook('jira', 'jira_issue_type', e.target.value)}
+              />
+            </div>
+          </div>
+        </CardBody>
+      </Card>
       
       <Card>
         <CardHeader>

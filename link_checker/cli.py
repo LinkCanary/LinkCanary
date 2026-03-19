@@ -5,6 +5,7 @@ import logging
 import sys
 from datetime import datetime
 
+import pandas as pd
 from tqdm import tqdm
 
 from . import __version__
@@ -259,6 +260,13 @@ def create_parser() -> argparse.ArgumentParser:
         action='version',
         version=f'%(prog)s {__version__}',
     )
+
+    parser.add_argument(
+        '--no-orphan-check',
+        action='store_true',
+        help='Skip orphaned page detection (sitemap mode only). '
+             'Useful on very large sites where the extra processing time is not desired.',
+    )
     
     parser.add_argument(
         '--html-report',
@@ -458,6 +466,9 @@ def main(args=None):
         return EXIT_CRAWL_FAILURE
     
     # Determine input mode
+    sitemap_mode = False  # Orphaned page detection — sitemap mode only
+    sitemap_urls: list[str] = []  # full sitemap URL list (before max_pages slice)
+
     if parsed_args.url:
         # Single URL mode
         print(f"Single URL mode: {parsed_args.url}")
@@ -483,14 +494,14 @@ def main(args=None):
             print("Error: Must provide sitemap_url, --url, or --urls-file")
             parser.print_help()
             return EXIT_CRAWL_FAILURE
-        
+
         print(f"Fetching sitemap: {parsed_args.sitemap_url}")
-        
+
         sitemap_parser = SitemapParser(
             user_agent=parsed_args.user_agent,
             timeout=parsed_args.timeout,
         )
-        
+
         try:
             page_urls = sitemap_parser.parse_sitemap(
                 parsed_args.sitemap_url,
@@ -501,12 +512,14 @@ def main(args=None):
             return EXIT_CRAWL_FAILURE
         finally:
             sitemap_parser.close()
-        
+
         if not page_urls:
             print("Error: No pages found in sitemap")
             return EXIT_CRAWL_FAILURE
-        
+
         base_url = parsed_args.sitemap_url
+        sitemap_mode = True
+        sitemap_urls = list(page_urls)  # capture before max_pages truncation
     
     if parsed_args.max_pages:
         page_urls = page_urls[:parsed_args.max_pages]
@@ -676,9 +689,17 @@ def main(args=None):
         expand_duplicates=parsed_args.expand_duplicates,
         skip_ok=parsed_args.skip_ok,
     )
-    
+
     df = reporter.generate_report(all_links, link_statuses)
-    
+
+    # Orphaned page detection — sitemap mode only
+    if sitemap_mode and not parsed_args.no_orphan_check:
+        orphan_df = reporter.generate_orphan_report(sitemap_urls, all_links)
+        orphan_count = len(orphan_df)
+        print(f"Found {orphan_count} orphaned page(s) (no internal links)")
+        if orphan_count > 0:
+            df = pd.concat([df, orphan_df], ignore_index=True)
+
     summary = reporter.get_summary(df)
     
     # Determine export format

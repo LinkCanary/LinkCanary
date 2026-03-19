@@ -76,6 +76,18 @@ export const urlResolutionApi = {
   }),
 };
 
+export const webhooksApi = {
+  list: () => fetchJson(`${API_BASE}/webhooks`),
+  create: (data) => fetchJson(`${API_BASE}/webhooks`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+  update: (id, data) => fetchJson(`${API_BASE}/webhooks/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  }),
+};
+
 export function createCrawlWebSocket(crawlId, onMessage, onError, onClose) {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const wsUrl = `${protocol}//${window.location.host}/ws/crawl/${crawlId}`;

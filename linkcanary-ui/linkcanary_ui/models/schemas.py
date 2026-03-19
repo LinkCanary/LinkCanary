@@ -105,12 +105,15 @@ class ReportIssue(BaseModel):
     link_url: str
     link_text: str
     link_type: str
+    element_type: str = 'a'
     status_code: int
     issue_type: str
     priority: str
     redirect_chain: Optional[str]
     final_url: Optional[str]
     recommended_fix: str
+    response_time_ms: Optional[float] = None
+    anchor_quality: str = ''
 
 
 class ReportResponse(BaseModel):
