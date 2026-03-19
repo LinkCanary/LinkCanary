@@ -224,16 +224,25 @@ def _run_crawl_sync(crawl_id: str):
             expand_duplicates=crawl.expand_duplicates,
             skip_ok=crawl.skip_ok,
         )
-        
+
         df = reporter.generate_report(all_links, link_statuses)
+
+        # Orphaned page detection — sitemap mode only
+        # crawl_task always operates in sitemap mode (crawl.sitemap_url is always set)
+        orphan_df = reporter.generate_orphan_report(page_urls, all_links)
+        orphan_count = len(orphan_df)
+        if orphan_count > 0:
+            import pandas as pd
+            df = pd.concat([df, orphan_df], ignore_index=True)
+
         reporter.save_report(df, str(csv_path))
-        
+
         summary = reporter.get_summary(df)
-        
+
         html_reporter = HTMLReportGenerator()
         html_reporter.load_csv(str(csv_path))
         html_reporter.generate_html(str(html_path))
-        
+
         crawl.report_csv_path = str(csv_path)
         crawl.report_html_path = str(html_path)
         crawl.issues_critical = summary.get('critical', 0)

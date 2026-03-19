@@ -7,6 +7,8 @@ const navItems = [
   { path: '/backlinks', label: 'Backlink Checker' },
   { path: '/url-resolution', label: 'URL Resolution' },
   { path: '/reports', label: 'Reports' },
+  { path: '/integrations', label: 'Integrations' },
+  { path: '/ci-setup', label: 'CI Setup' },
   { path: '/settings', label: 'Settings' },
 ];
 

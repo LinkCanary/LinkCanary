@@ -9,6 +9,8 @@ import ReportViewer from './pages/ReportViewer';
 import Settings from './pages/Settings';
 import BacklinkChecker from './pages/BacklinkChecker';
 import UrlResolution from './pages/UrlResolution';
+import Integrations from './pages/Integrations';
+import CiDocs from './pages/CiDocs';
 
 export default function App() {
   return (
@@ -24,6 +26,8 @@ export default function App() {
             <Route path="/backlinks" element={<BacklinkChecker />} />
             <Route path="/url-resolution" element={<UrlResolution />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/integrations" element={<Integrations />} />
+            <Route path="/ci-setup" element={<CiDocs />} />
           </Routes>
         </Layout>
       </BrowserRouter>

@@ -225,12 +225,15 @@ async def get_report(
                     link_url=row.get('link_url', ''),
                     link_text=row.get('link_text', ''),
                     link_type=row.get('link_type', ''),
+                    element_type=row.get('element_type', 'a'),
                     status_code=int(row.get('status_code', 0)),
                     issue_type=row.get('issue_type', ''),
                     priority=row.get('priority', ''),
                     redirect_chain=row.get('redirect_chain') or None,
                     final_url=row.get('final_url') or None,
                     recommended_fix=row.get('recommended_fix', ''),
+                    response_time_ms=float(row['response_time_ms']) if row.get('response_time_ms') else None,
+                    anchor_quality=row.get('anchor_quality', ''),
                 ))
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Report file not found")

@@ -1,13 +1,24 @@
 name: LinkCanary Crawl
 
 on:
+  schedule:
+    - cron: '0 6 * * 1'   # Every Monday at 06:00 UTC
   workflow_dispatch:
     inputs:
       sitemap-url:
-        description: 'URL to sitemap.xml'
-        required: true
+        description: 'URL to sitemap.xml (leave blank if using url or urls-file)'
+        required: false
+        default: ''
+      url:
+        description: 'Check a single URL (overrides sitemap-url). Useful for CMS publish webhooks.'
+        required: false
+        default: ''
+      urls-file:
+        description: 'Path to file with URLs to check (one per line)'
+        required: false
+        default: ''
       fail-on-priority:
-        description: 'Minimum priority to fail build (critical/high/medium/low/none)'
+        description: 'Minimum priority to fail build (critical/high/medium/low/any/none)'
         required: false
         default: 'high'
       max-pages:
@@ -15,52 +26,163 @@ on:
         required: false
         default: '0'
       skip-ok:
-        description: 'Exclude 200 OK from reports'
+        description: 'Exclude 200 OK from reports (true/false)'
         required: false
         default: 'true'
       delay:
         description: 'Seconds between requests'
         required: false
         default: '0.5'
+      timeout:
+        description: 'Request timeout in seconds'
+        required: false
+        default: '10'
+      max-retries:
+        description: 'Max retries for transient errors (0 = disabled)'
+        required: false
+        default: '3'
+      format:
+        description: 'Export format (csv/json/mdx/xlsx/pdf)'
+        required: false
+        default: 'csv'
+      exclude-pattern:
+        description: 'Exclude URLs matching pattern (newline-separated)'
+        required: false
+        default: ''
+      include-pattern:
+        description: 'Only check URLs matching pattern (newline-separated)'
+        required: false
+        default: ''
       auth-user:
-        description: 'Username for basic auth'
+        description: 'Username for basic auth (use secrets for real credentials)'
         required: false
+        default: ''
       auth-pass:
-        description: 'Password for basic auth'
+        description: 'Password for basic auth (use secrets!)'
         required: false
+        default: ''
+      auth-header:
+        description: 'Custom Authorization header value (e.g. "Bearer ${{ secrets.API_TOKEN }}")'
+        required: false
+        default: ''
+      webhook-url:
+        description: 'Webhook URL for Slack/Discord notifications'
+        required: false
+        default: ''
 
 jobs:
-  test:
+  linkcanary:
     name: Run LinkCanary Crawl
     runs-on: ubuntu-latest
-    
+
+    outputs:
+      total-issues: ${{ steps.run-linkcanary.outputs.total-issues }}
+      critical:     ${{ steps.run-linkcanary.outputs.critical }}
+      high:         ${{ steps.run-linkcanary.outputs.high }}
+      medium:       ${{ steps.run-linkcanary.outputs.medium }}
+      low:          ${{ steps.run-linkcanary.outputs.low }}
+      broken:       ${{ steps.run-linkcanary.outputs.broken }}
+      exit-code:    ${{ steps.run-linkcanary.outputs.exit-code }}
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
+
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
-        
+        cache: 'pip'
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -e .
-        
+
     - name: Run LinkCanary crawl
+      id: run-linkcanary
+      continue-on-error: true
       run: |
-        echo "Running LinkCanary crawl with:"
-        echo "Sitemap URL: ${{ inputs.sitemap-url }}"
-        echo "Fail on priority: ${{ inputs.fail-on-priority }}"
-        echo "Max pages: ${{ inputs.max-pages }}"
-        echo "Skip OK: ${{ inputs.skip-ok }}"
-        echo "Delay: ${{ inputs.delay }}"
-        
-        # Add your LinkCanary crawl command here
-        # Example: linkcanary crawl ${{ inputs.sitemap-url }} --fail-on ${{ inputs.fail-on-priority }} --max-pages ${{ inputs.max-pages }} --skip-ok ${{ inputs.skip-ok }} --delay ${{ inputs.delay }}
-        
-        if [ -n "${{ inputs.auth-user }}" ] && [ -n "${{ inputs.auth-pass }}" ]; then
-          echo "Using basic auth with user: ${{ inputs.auth-user }}"
-          # Add auth parameters to your command
+        # ----------------------------------------------------------------
+        # Build the linkcheck command from workflow inputs
+        # ----------------------------------------------------------------
+
+        CMD="linkcheck"
+
+        # --- Input source (mutually exclusive) --------------------------
+        if [ -n "${{ inputs.url }}" ]; then
+          CMD="$CMD --url '${{ inputs.url }}'"
+        elif [ -n "${{ inputs.urls-file }}" ]; then
+          CMD="$CMD --urls-file '${{ inputs.urls-file }}'"
+        else
+          CMD="$CMD '${{ inputs.sitemap-url }}'"
         fi
+
+        # --- Priority threshold ------------------------------------------
+        CMD="$CMD --fail-on-priority '${{ inputs.fail-on-priority }}'"
+
+        # --- Skip-OK flag (boolean, no value) ----------------------------
+        if [ "${{ inputs.skip-ok }}" = "true" ]; then
+          CMD="$CMD --skip-ok"
+        fi
+
+        # --- Max pages (skip if 0 / unlimited) ---------------------------
+        if [ "${{ inputs.max-pages }}" != "0" ] && [ -n "${{ inputs.max-pages }}" ]; then
+          CMD="$CMD --max-pages '${{ inputs.max-pages }}'"
+        fi
+
+        # --- Delay -------------------------------------------------------
+        CMD="$CMD --delay '${{ inputs.delay }}'"
+
+        # --- Timeout -----------------------------------------------------
+        CMD="$CMD --timeout '${{ inputs.timeout }}'"
+
+        # --- Max retries -------------------------------------------------
+        CMD="$CMD --max-retries '${{ inputs.max-retries }}'"
+
+        # --- Export format -----------------------------------------------
+        CMD="$CMD --format '${{ inputs.format }}'"
+
+        # --- CI mode (writes to GITHUB_OUTPUT) ---------------------------
+        CMD="$CMD --ci"
+
+        # --- Basic auth (only if both user and pass are provided) --------
+        if [ -n "${{ inputs.auth-user }}" ] && [ -n "${{ inputs.auth-pass }}" ]; then
+          CMD="$CMD --auth-user '${{ inputs.auth-user }}' --auth-pass '${{ inputs.auth-pass }}'"
+        fi
+
+        # --- Custom Authorization header ---------------------------------
+        if [ -n "${{ inputs.auth-header }}" ]; then
+          CMD="$CMD --header 'Authorization: ${{ inputs.auth-header }}'"
+        fi
+
+        # --- Exclude patterns (one --exclude-pattern flag per pattern) ---
+        if [ -n "${{ inputs.exclude-pattern }}" ]; then
+          while IFS= read -r pattern; do
+            [ -n "$pattern" ] && CMD="$CMD --exclude-pattern '$pattern'"
+          done <<< "${{ inputs.exclude-pattern }}"
+        fi
+
+        # --- Include patterns (one --include-pattern flag per pattern) ---
+        if [ -n "${{ inputs.include-pattern }}" ]; then
+          while IFS= read -r pattern; do
+            [ -n "$pattern" ] && CMD="$CMD --include-pattern '$pattern'"
+          done <<< "${{ inputs.include-pattern }}"
+        fi
+
+        # ----------------------------------------------------------------
+        # Execute
+        # ----------------------------------------------------------------
+        echo "Running: $CMD"
+        eval "$CMD"
+
+    - name: Upload link report artifact
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: linkcanary-report
+        path: |
+          link_report.*
+          linkcanary-report.*
+        if-no-files-found: warn
+        retention-days: 30
