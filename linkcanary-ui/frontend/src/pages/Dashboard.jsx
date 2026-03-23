@@ -281,6 +281,16 @@ export default function Dashboard() {
   
   return (
     <div className="space-y-8">
+      <div>
+        <div className="flex items-center gap-3 mb-1">
+          <h1 className="text-3xl font-bold text-dark dark:text-primary">LinkCanary</h1>
+          <span className="text-xs font-mono font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+            v1.1
+          </span>
+        </div>
+        <p className="text-gray-500 dark:text-secondary/70">Broken link detection for teams who ship.</p>
+      </div>
+
       <Card>
         <CardBody>
           <h2 className="text-xl font-semibold text-dark dark:text-primary mb-4">Quick Start</h2>
