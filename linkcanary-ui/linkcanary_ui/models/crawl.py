@@ -72,7 +72,8 @@ class Crawl(Base):
     report_html_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     
     celery_task_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    
+    share_token: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, unique=True)
+
     @property
     def duration_seconds(self) -> Optional[float]:
         """Calculate crawl duration."""
@@ -126,4 +127,5 @@ class Crawl(Base):
             "error_message": self.error_message,
             "report_csv_path": self.report_csv_path,
             "report_html_path": self.report_html_path,
+            "share_token": self.share_token,
         }

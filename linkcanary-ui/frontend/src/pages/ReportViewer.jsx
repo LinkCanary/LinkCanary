@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import Card, { CardBody, CardHeader } from '../components/Card';
 import Button from '../components/Button';
@@ -313,17 +313,174 @@ function IssueCard({ issue }) {
   );
 }
 
+function TransparencyPanel({ transparency }) {
+  const [open, setOpen] = useState(false);
+  if (!transparency) return null;
+
+  const { status_code_distribution: dist = {} } = transparency;
+  const grouped = { '2xx': 0, '3xx': 0, '4xx': 0, '5xx': 0, 'error': 0 };
+  Object.entries(dist).forEach(([code, count]) => {
+    const n = parseInt(code, 10);
+    if (isNaN(n) || n === 0) grouped['error'] += count;
+    else if (n < 300) grouped['2xx'] += count;
+    else if (n < 400) grouped['3xx'] += count;
+    else if (n < 500) grouped['4xx'] += count;
+    else grouped['5xx'] += count;
+  });
+
+  const scopeLabel = { internal_only: 'Internal links only', external_only: 'External links only', all: 'All links' };
+  const fmtDuration = (s) => s == null ? '—' : s < 60 ? `${Math.round(s)}s` : `${Math.floor(s / 60)}m ${Math.round(s % 60)}s`;
+
+  return (
+    <Card>
+      <CardBody>
+        <button
+          className="w-full flex items-center justify-between text-left"
+          onClick={() => setOpen(!open)}
+        >
+          <span className="font-semibold text-gray-800 dark:text-primary">Crawl Transparency</span>
+          <span className="text-gray-400 text-sm">{open ? '▲ Hide' : '▼ What was scanned?'}</span>
+        </button>
+
+        {open && (
+          <div className="mt-4 grid md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+            {/* What was scanned */}
+            <div className="space-y-2">
+              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Coverage</div>
+              <Row label="Sitemap" value={<a href={transparency.sitemap_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline truncate block max-w-[200px]">{transparency.sitemap_url}</a>} />
+              <Row label="Pages in sitemap" value={transparency.pages_in_sitemap} />
+              <Row label="Pages crawled" value={transparency.pages_crawled} />
+              {transparency.page_cap_applied && (
+                <div className="text-xs text-yellow-700 bg-yellow-50 border border-yellow-200 rounded p-2">
+                  {transparency.skipped_reason}
+                </div>
+              )}
+              <Row label="Links checked" value={transparency.links_checked} />
+              <Row label="Scope" value={scopeLabel[transparency.scope] || transparency.scope} />
+              <Row label="robots.txt" value={transparency.robots_txt_respected ? '✓ Respected' : 'Ignored'} />
+            </div>
+
+            {/* Status code distribution */}
+            <div className="space-y-2">
+              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Status Codes</div>
+              {Object.entries(grouped).map(([label, count]) => (
+                count > 0 && (
+                  <div key={label} className="flex items-center justify-between">
+                    <span className={`font-mono text-xs px-1.5 py-0.5 rounded ${
+                      label === '2xx' ? 'bg-green-100 text-green-800' :
+                      label === '3xx' ? 'bg-yellow-100 text-yellow-800' :
+                      label === 'error' ? 'bg-gray-100 text-gray-600' :
+                      'bg-red-100 text-red-800'
+                    }`}>{label}</span>
+                    <span className="text-gray-700 font-medium">{count}</span>
+                  </div>
+                )
+              ))}
+              <div className="mt-1 pt-1 border-t border-gray-100">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500">Internal</span>
+                  <span className="text-gray-700">{transparency.link_type_breakdown?.internal ?? '—'}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500">External</span>
+                  <span className="text-gray-700">{transparency.link_type_breakdown?.external ?? '—'}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Performance & settings */}
+            <div className="space-y-2">
+              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Performance & Settings</div>
+              <Row label="Duration" value={fmtDuration(transparency.duration_seconds)} />
+              <Row label="Avg response" value={transparency.avg_response_time_ms != null ? `${transparency.avg_response_time_ms}ms` : '—'} />
+              <Row label="Delay" value={`${transparency.delay_seconds}s between requests`} />
+              <Row label="Timeout" value={`${transparency.timeout_seconds}s`} />
+              <Row label="User agent" value={<span className="font-mono text-xs">{transparency.user_agent}</span>} />
+            </div>
+          </div>
+        )}
+      </CardBody>
+    </Card>
+  );
+}
+
+function Row({ label, value }) {
+  return (
+    <div className="flex items-start justify-between gap-2">
+      <span className="text-gray-500 shrink-0">{label}</span>
+      <span className="text-gray-800 dark:text-primary text-right">{value}</span>
+    </div>
+  );
+}
+
+function ShareModal({ crawlId, onClose }) {
+  const [shareUrl, setShareUrl] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState(false);
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    crawlsApi.share(crawlId)
+      .then((data) => setShareUrl(`${window.location.origin}/share/${data.share_token}`))
+      .catch(() => setShareUrl(null))
+      .finally(() => setLoading(false));
+  }, [crawlId]);
+
+  function copyUrl() {
+    if (inputRef.current) {
+      inputRef.current.select();
+      navigator.clipboard.writeText(inputRef.current.value).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      });
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-900">Share Report</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
+        </div>
+        <p className="text-sm text-gray-500">
+          Anyone with this link can view this report — no login required.
+        </p>
+        {loading ? (
+          <div className="text-center py-4 text-gray-400">Generating link…</div>
+        ) : shareUrl ? (
+          <div className="flex gap-2">
+            <input
+              ref={inputRef}
+              readOnly
+              value={shareUrl}
+              className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-2 font-mono bg-gray-50 focus:outline-none"
+              onClick={(e) => e.target.select()}
+            />
+            <Button onClick={copyUrl} variant={copied ? 'success' : 'primary'} size="sm">
+              {copied ? 'Copied!' : 'Copy'}
+            </Button>
+          </div>
+        ) : (
+          <p className="text-red-600 text-sm">Failed to generate share link.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function ReportViewer() {
   const { id } = useParams();
   const [crawl, setCrawl] = useState(null);
   const [report, setReport] = useState(null);
+  const [transparency, setTransparency] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [showShareModal, setShowShareModal] = useState(false);
 
   const [search, setSearch] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('');
   const [issueTypeFilter, setIssueTypeFilter] = useState('');
-  // Change 7: Status code filter state
   const [statusCodeFilter, setStatusCodeFilter] = useState('');
 
   useEffect(() => {
@@ -338,6 +495,8 @@ export default function ReportViewer() {
       ]);
       setCrawl(crawlData);
       setReport(reportData);
+      // Load transparency independently — non-blocking
+      crawlsApi.getTransparency(id).then(setTransparency).catch(() => {});
     } catch (err) {
       setError(err.message);
     } finally {
@@ -399,24 +558,23 @@ export default function ReportViewer() {
           <h1 className="text-2xl font-bold text-gray-900">{crawl?.name}</h1>
           <p className="text-gray-500 text-sm">{crawl?.sitemap_url}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <Button variant="primary" size="sm" onClick={() => setShowShareModal(true)}>
+            Share Report
+          </Button>
           <a href={reportsApi.downloadCsvUrl(id)} download>
-            <Button variant="secondary" size="sm">
-              Download CSV
-            </Button>
+            <Button variant="secondary" size="sm">CSV</Button>
           </a>
           <a href={reportsApi.downloadHtmlUrl(id)} download>
-            <Button variant="secondary" size="sm">
-              Download HTML
-            </Button>
+            <Button variant="secondary" size="sm">HTML</Button>
           </a>
           <Link to="/reports">
-            <Button variant="secondary" size="sm">
-              Back
-            </Button>
+            <Button variant="secondary" size="sm">Back</Button>
           </Link>
         </div>
       </div>
+
+      {showShareModal && <ShareModal crawlId={id} onClose={() => setShowShareModal(false)} />}
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <Card>
@@ -446,6 +604,8 @@ export default function ReportViewer() {
           </Card>
         ))}
       </div>
+
+      <TransparencyPanel transparency={transparency} />
 
       <Card>
         <CardBody>
