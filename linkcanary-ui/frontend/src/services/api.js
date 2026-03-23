@@ -38,7 +38,13 @@ export const crawlsApi = {
   rerun: (id) => fetchJson(`${API_BASE}/crawls/${id}/rerun`, { method: 'POST' }),
   
   getReport: (id) => fetchJson(`${API_BASE}/crawls/${id}/report`),
-  
+
+  getTransparency: (id) => fetchJson(`${API_BASE}/crawls/${id}/transparency`),
+
+  share: (id) => fetchJson(`${API_BASE}/crawls/${id}/share`, { method: 'POST' }),
+
+  getShared: (token) => fetchJson(`${API_BASE}/crawls/shared/${token}`),
+
   validateSitemap: (url) => fetchJson(`${API_BASE}/crawls/validate-sitemap`, {
     method: 'POST',
     body: JSON.stringify({ url }),

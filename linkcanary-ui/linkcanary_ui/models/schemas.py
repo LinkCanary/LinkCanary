@@ -54,7 +54,8 @@ class CrawlResponse(BaseModel):
     error_message: Optional[str]
     report_csv_path: Optional[str]
     report_html_path: Optional[str]
-    
+    share_token: Optional[str] = None
+
     class Config:
         from_attributes = True
 
@@ -281,3 +282,32 @@ class UrlResolutionResult(BaseModel):
 class UrlResolutionResponse(BaseModel):
     """Response from URL resolution test."""
     results: list[UrlResolutionResult]
+
+
+class CrawlTransparencyResponse(BaseModel):
+    """Transparency summary of what a crawl scanned and how."""
+    crawl_id: str
+    sitemap_url: str
+    pages_in_sitemap: int
+    pages_crawled: int
+    page_cap_applied: bool
+    links_checked: int
+    scope: str  # "internal_only" | "external_only" | "all"
+    robots_txt_respected: bool
+    delay_seconds: float
+    timeout_seconds: int
+    user_agent: str
+    duration_seconds: Optional[float]
+    started_at: Optional[datetime]
+    completed_at: Optional[datetime]
+    status_code_distribution: dict[str, int]
+    avg_response_time_ms: Optional[float]
+    link_type_breakdown: dict[str, int]
+    issue_type_breakdown: dict[str, int]
+    skipped_reason: Optional[str]
+
+
+class ShareResponse(BaseModel):
+    """Shareable link response."""
+    share_token: str
+    share_url: str

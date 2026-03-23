@@ -11,13 +11,15 @@ import BacklinkChecker from './pages/BacklinkChecker';
 import UrlResolution from './pages/UrlResolution';
 import Integrations from './pages/Integrations';
 import CiDocs from './pages/CiDocs';
+import ShareView from './pages/ShareView';
 
 export default function App() {
   return (
     <ThemeProvider>
       <BrowserRouter>
-        <Layout>
-          <Routes>
+        <Routes>
+          <Route path="/share/:token" element={<ShareView />} />
+          <Route path="/*" element={<Layout><Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/crawl/new" element={<NewCrawl />} />
             <Route path="/crawl/:id/progress" element={<CrawlProgress />} />
@@ -28,8 +30,8 @@ export default function App() {
             <Route path="/settings" element={<Settings />} />
             <Route path="/integrations" element={<Integrations />} />
             <Route path="/ci-setup" element={<CiDocs />} />
-          </Routes>
-        </Layout>
+          </Routes></Layout>} />
+        </Routes>
       </BrowserRouter>
     </ThemeProvider>
   );
