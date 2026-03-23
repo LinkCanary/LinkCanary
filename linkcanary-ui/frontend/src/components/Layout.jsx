@@ -47,6 +47,9 @@ export default function Layout({ children }) {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
               </svg>
               <span className="text-xl font-bold">LinkCanary</span>
+              <span className="text-xs font-mono font-medium px-1.5 py-0.5 rounded bg-primary/20 text-primary border border-primary/30 leading-none">
+                v1.1
+              </span>
             </Link>
             
             <div className="flex items-center gap-2">
