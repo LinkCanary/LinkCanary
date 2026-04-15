@@ -12,6 +12,7 @@ from . import __version__
 from .checker import LinkChecker
 from .crawler import PageCrawler
 from .exporters import ExportFormat, ReportExporter, detect_format
+from .fp_logger import FPLogger
 from .html_reporter import HTMLReportGenerator
 from .patterns import URLPatternMatcher, create_matcher_from_args
 from .reporter import ReportGenerator
@@ -296,13 +297,74 @@ def create_parser() -> argparse.ArgumentParser:
     )
     
     parser.add_argument(
+        '--baseline-sitemap',
+        metavar='URL',
+        default=None,
+        help='Sitemap URL for the production/baseline build. '
+             'Links that return 404 in this build but exist in the baseline are '
+             'reported as preview_404 (informational) rather than broken_404. '
+             'Intended for PR preview environments where only changed pages are built.',
+    )
+
+    parser.add_argument(
         '--test-urls',
         nargs='+',
         metavar='URL',
         help='Diagnostic: test URL resolution for given base URLs. '
              'Prints how relative paths resolve against each URL.',
     )
-    
+
+    fp_group = parser.add_argument_group(
+        'false positive logging',
+        'Options for logging classifier decisions and recording corrections.',
+    )
+
+    fp_group.add_argument(
+        '--fp-log',
+        metavar='FILE',
+        default=None,
+        help='Path for the JSONL false positive log '
+             '(default: <output-stem>.fp.jsonl alongside the report). '
+             'Each classification decision is appended as one JSON line.',
+    )
+
+    fp_group.add_argument(
+        '--no-fp-log',
+        action='store_true',
+        help='Disable false positive logging entirely.',
+    )
+
+    fp_group.add_argument(
+        '--mark-fp',
+        metavar='URL',
+        default=None,
+        help='Record a correction: mark URL as a false positive and exit. '
+             'Requires --correct-priority.',
+    )
+
+    fp_group.add_argument(
+        '--correct-priority',
+        choices=['critical', 'high', 'medium', 'low'],
+        default=None,
+        help='The correct priority to assign when recording a correction with --mark-fp.',
+    )
+
+    fp_group.add_argument(
+        '--fp-note',
+        metavar='TEXT',
+        default='',
+        help='Optional note to attach to a --mark-fp correction.',
+    )
+
+    fp_group.add_argument(
+        '--review',
+        nargs='?',
+        const=True,
+        metavar='FILE',
+        help='Interactively review issues in a report and mark false positives. '
+             'FILE defaults to the --output path. Example: linkcheck --review link_report.csv',
+    )
+
     return parser
 
 
@@ -382,6 +444,11 @@ Priority Breakdown
     if low > 0:
         print(f"  Low:      {low:>4} issues")
 
+    preview_404 = summary.get('preview_404', 0)
+    if preview_404 > 0:
+        print(f"\nBaseline suppressed")
+        print(f"  Preview-only 404: {preview_404:>4}  (page exists in baseline, excluded from this build)")
+
 
 def check_priority_threshold(summary: dict, fail_on: str) -> bool:
     """Check if issues exceed the priority threshold.
@@ -426,6 +493,140 @@ def check_priority_threshold(summary: dict, fail_on: str) -> bool:
     return max_issue_priority >= threshold
 
 
+_PRIORITY_LABELS = {
+    'critical': 'CRITICAL',
+    'high':     'HIGH    ',
+    'medium':   'MEDIUM  ',
+    'low':      'LOW     ',
+}
+
+_PRIORITY_SHORTCUTS = {'c': 'critical', 'h': 'high', 'm': 'medium', 'l': 'low'}
+
+
+def _parse_selection(raw: str, max_index: int) -> list[int]:
+    """Parse a selection string like '1,3,5-7' into a sorted list of 0-based indices."""
+    indices = set()
+    for part in raw.split(','):
+        part = part.strip()
+        if not part:
+            continue
+        if '-' in part:
+            lo, _, hi = part.partition('-')
+            try:
+                lo_i, hi_i = int(lo.strip()), int(hi.strip())
+                indices.update(range(lo_i - 1, hi_i))
+            except ValueError:
+                pass
+        else:
+            try:
+                indices.add(int(part) - 1)
+            except ValueError:
+                pass
+    return sorted(i for i in indices if 0 <= i < max_index)
+
+
+def _run_review_mode(report_path: str, fp_log_path: str) -> int:
+    """Interactive false positive review for an existing report."""
+    import os
+
+    if not os.path.exists(report_path):
+        print(f"Error: report not found: {report_path}")
+        print("Run a scan first, or specify a path with --review FILE")
+        return EXIT_CRAWL_FAILURE
+
+    df = pd.read_csv(report_path)
+    issues = df[df['issue_type'] != 'ok'].reset_index(drop=True)
+
+    if issues.empty:
+        print(f"No issues found in {report_path} — nothing to review.")
+        return EXIT_SUCCESS
+
+    fp_logger = FPLogger(fp_log_path)
+
+    width = 72
+    print(f"\nReviewing {len(issues)} issue(s) from {report_path}")
+    print('─' * width)
+    print(f"  {'#':>3}  {'Priority':<10}  {'Issue':<18}  URL")
+    print('─' * width)
+
+    for i, row in issues.iterrows():
+        label = _PRIORITY_LABELS.get(row['priority'], row['priority'].upper()[:8])
+        url = row['link_url']
+        url_display = url if len(url) <= 46 else url[:43] + '...'
+        print(f"  {i + 1:>3}  {label}  {row['issue_type']:<18}  {url_display}")
+
+        source = row.get('source_page', '')
+        count = row.get('occurrence_count', 1)
+        if source and source != 'multiple':
+            src_display = source if len(source) <= 46 else source[:43] + '...'
+            count_str = f' (×{count})' if count > 1 else ''
+            print(f"       {'':10}  {'':18}  found on: {src_display}{count_str}")
+        elif source == 'multiple':
+            print(f"       {'':10}  {'':18}  found on: {count} pages")
+
+    print('─' * width)
+    print("\n  Select issues to mark as false positives.")
+    print("  Numbers, ranges, or 'all'  (e.g. 1,3,5-7)  — Enter to skip.\n")
+
+    try:
+        raw = input("  Selection: ").strip()
+    except (KeyboardInterrupt, EOFError):
+        print("\nAborted.")
+        return EXIT_SUCCESS
+
+    if not raw:
+        print("No selection made.")
+        return EXIT_SUCCESS
+
+    if raw.lower() == 'all':
+        selected = list(range(len(issues)))
+    else:
+        selected = _parse_selection(raw, len(issues))
+
+    if not selected:
+        print("No valid issue numbers in selection.")
+        return EXIT_SUCCESS
+
+    corrections = []
+    print()
+
+    for idx in selected:
+        row = issues.iloc[idx]
+        url = row['link_url']
+        current = row['priority']
+        url_display = url if len(url) <= 60 else url[:57] + '...'
+        print(f"  #{idx + 1}  {url_display}  [currently: {current}]")
+
+        try:
+            raw_p = input("       Correct priority  c=critical  h=high  m=medium  l=low  (Enter=skip): ").strip().lower()
+        except (KeyboardInterrupt, EOFError):
+            print("\nAborted.")
+            break
+
+        correct = _PRIORITY_SHORTCUTS.get(raw_p) or (raw_p if raw_p in _PRIORITY_SHORTCUTS.values() else None)
+        if not correct:
+            print("       Skipped.\n")
+            continue
+
+        try:
+            note = input("       Note (optional): ").strip()
+        except (KeyboardInterrupt, EOFError):
+            note = ''
+
+        corrections.append((url, correct, note))
+        print()
+
+    if not corrections:
+        print("No corrections recorded.")
+        return EXIT_SUCCESS
+
+    for url, correct, note in corrections:
+        fp_logger.log_correction(link_url=url, correct_priority=correct, note=note)
+
+    print(f"  {len(corrections)} correction(s) recorded in {fp_log_path}")
+    return EXIT_SUCCESS
+
+
 def main(args=None):
     """Main entry point."""
     parser = create_parser()
@@ -461,6 +662,40 @@ def main(args=None):
         print("All URLs resolved correctly. No subdirectory stripping detected.")
         return EXIT_SUCCESS
     
+    # --review mode: interactive false positive review of an existing report.
+    if parsed_args.review:
+        from pathlib import Path
+        report_path = parsed_args.review if isinstance(parsed_args.review, str) else parsed_args.output
+        fp_log_path = parsed_args.fp_log or (
+            str(Path(parsed_args.output).parent /
+                (Path(parsed_args.output).stem + '.fp.jsonl'))
+        )
+        return _run_review_mode(report_path, fp_log_path)
+
+    # --mark-fp correction mode: record a user correction and exit immediately.
+    if parsed_args.mark_fp:
+        if not parsed_args.correct_priority:
+            print("Error: --mark-fp requires --correct-priority")
+            return EXIT_CRAWL_FAILURE
+
+        from pathlib import Path
+        log_path = parsed_args.fp_log or (
+            str(Path(parsed_args.output).parent /
+                (Path(parsed_args.output).stem + '.fp.jsonl'))
+        )
+        fp_logger = FPLogger(log_path)
+        fp_logger.log_correction(
+            link_url=parsed_args.mark_fp,
+            correct_priority=parsed_args.correct_priority,
+            note=parsed_args.fp_note,
+        )
+        print(f"Correction recorded in {log_path}")
+        print(f"  URL:              {parsed_args.mark_fp}")
+        print(f"  Correct priority: {parsed_args.correct_priority}")
+        if parsed_args.fp_note:
+            print(f"  Note:             {parsed_args.fp_note}")
+        return EXIT_SUCCESS
+
     if parsed_args.internal_only and parsed_args.external_only:
         print("Error: Cannot use both --internal-only and --external-only")
         return EXIT_CRAWL_FAILURE
@@ -685,9 +920,40 @@ def main(args=None):
         print(f"  URLs that required retries: {cache_stats['urls_with_retries']}")
         print(f"  Total retry attempts: {cache_stats['total_retries']}")
     
+    # Fetch baseline sitemap for preview-404 reclassification.
+    baseline_urls: set = set()
+    if parsed_args.baseline_sitemap:
+        print(f"Fetching baseline sitemap: {parsed_args.baseline_sitemap}")
+        baseline_parser = SitemapParser(
+            user_agent=parsed_args.user_agent,
+            timeout=parsed_args.timeout,
+        )
+        try:
+            from .utils import normalize_url as _norm
+            raw_baseline = baseline_parser.parse_sitemap(parsed_args.baseline_sitemap)
+            baseline_urls = {_norm(u) for u in raw_baseline}
+            print(f"Baseline: {len(baseline_urls)} URLs loaded")
+        except Exception as exc:
+            print(f"Warning: Could not fetch baseline sitemap: {exc}")
+        finally:
+            baseline_parser.close()
+
+    # Set up false positive logger unless explicitly disabled.
+    fp_logger = None
+    if not parsed_args.no_fp_log:
+        from pathlib import Path
+        fp_log_path = parsed_args.fp_log or (
+            str(Path(parsed_args.output).parent /
+                (Path(parsed_args.output).stem + '.fp.jsonl'))
+        )
+        fp_logger = FPLogger(fp_log_path)
+        print(f"FP log: {fp_log_path}")
+
     reporter = ReportGenerator(
         expand_duplicates=parsed_args.expand_duplicates,
         skip_ok=parsed_args.skip_ok,
+        fp_logger=fp_logger,
+        baseline_urls=baseline_urls or None,
     )
 
     df = reporter.generate_report(all_links, link_statuses)
