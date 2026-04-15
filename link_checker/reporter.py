@@ -10,6 +10,7 @@ import pandas as pd
 
 from .checker import LinkStatus
 from .crawler import ExtractedLink
+from .fp_logger import FPLogger
 from .utils import normalize_url
 
 logger = logging.getLogger(__name__)
@@ -56,9 +57,17 @@ class ReportRow:
 class ReportGenerator:
     """Generates CSV reports from crawl and check results."""
     
-    def __init__(self, expand_duplicates: bool = False, skip_ok: bool = False):
+    def __init__(
+        self,
+        expand_duplicates: bool = False,
+        skip_ok: bool = False,
+        fp_logger: Optional[FPLogger] = None,
+        baseline_urls: Optional[set] = None,
+    ):
         self.expand_duplicates = expand_duplicates
         self.skip_ok = skip_ok
+        self.fp_logger = fp_logger
+        self.baseline_urls = baseline_urls
     
     def _determine_issue_type(
         self,
@@ -108,9 +117,12 @@ class ReportGenerator:
         hop_count: int = 0,
     ) -> str:
         """Determine the priority level for an issue."""
+        if issue_type == 'preview_404':
+            return 'info'
+
         if issue_type == 'redirect_loop':
             return 'critical'
-        
+
         if issue_type == 'redirect_chain' and hop_count >= 3:
             return 'critical'
         
@@ -157,6 +169,12 @@ class ReportGenerator:
         hop_count: int = 0,
     ) -> str:
         """Generate a fix recommendation for an issue."""
+        if issue_type == 'preview_404':
+            return (
+                'Page exists in baseline sitemap but returned 404 in this build. '
+                'Not a real broken link — likely an unchanged page excluded from the preview build.'
+            )
+
         if issue_type == 'mixed_content':
             return (
                 'Mixed content: this HTTP resource is loaded on an HTTPS page. '
@@ -219,7 +237,11 @@ class ReportGenerator:
                 continue
             
             issue_type = self._determine_issue_type(status, occurrences[0])
-            
+
+            if issue_type == 'broken_404' and self.baseline_urls:
+                if normalize_url(link_url) in self.baseline_urls:
+                    issue_type = 'preview_404'
+
             if self.skip_ok and issue_type == 'ok':
                 continue
             
@@ -227,6 +249,18 @@ class ReportGenerator:
             hop_count = len(status.redirect_chain) - 1 if status.redirect_chain else 0
             
             priority = self._determine_priority(issue_type, is_internal, hop_count)
+
+            if self.fp_logger is not None:
+                self.fp_logger.log_classification(
+                    link_url=link_url,
+                    source_page=occurrences[0].source_url,
+                    status_code=status.status_code,
+                    issue_type=issue_type,
+                    is_internal=is_internal,
+                    hop_count=hop_count,
+                    assigned_priority=priority,
+                )
+
             recommended_fix = self._generate_fix_recommendation(
                 issue_type, is_internal, status.final_url, hop_count
             )
@@ -287,7 +321,7 @@ class ReportGenerator:
         df = pd.DataFrame([vars(row) for row in rows])
         
         if not df.empty:
-            priority_order = {'critical': 0, 'high': 1, 'medium': 2, 'low': 3}
+            priority_order = {'critical': 0, 'high': 1, 'medium': 2, 'low': 3, 'info': 4}
             df['priority_sort'] = df['priority'].map(priority_order)
             df = df.sort_values(['priority_sort', 'occurrence_count'], ascending=[True, False])
             df = df.drop('priority_sort', axis=1)
@@ -408,6 +442,7 @@ class ReportGenerator:
                 'errors': 0,
                 'mixed_content': 0,
                 'orphaned_pages': 0,
+                'preview_404': 0,
                 'critical': 0,
                 'high': 0,
                 'medium': 0,
@@ -432,6 +467,7 @@ class ReportGenerator:
             'errors': issue_counts.get('error', 0),
             'mixed_content': issue_counts.get('mixed_content', 0),
             'orphaned_pages': issue_counts.get('orphaned_page', 0),
+            'preview_404': issue_counts.get('preview_404', 0),
             'critical': priority_counts.get('critical', 0),
             'high': priority_counts.get('high', 0),
             'medium': priority_counts.get('medium', 0),
