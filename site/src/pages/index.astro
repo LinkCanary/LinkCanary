@@ -254,27 +254,55 @@ import '../styles/landing.css';
 <section id="pricing" style="background:rgba(255,255,255,.012);border-top:1px solid var(--border-soft);border-bottom:1px solid var(--border-soft)">
   <div class="wrap">
     <div class="sec-head center reveal">
-      <span class="eyebrow" style="justify-content:center">Open source</span>
-      <h2>Free and open source. Forever.</h2>
-      <p>LinkCanary is MIT licensed. Clone it, self-host it, and watch as many links as you like. No accounts, no credit card, no limits.</p>
-    </div>
-    <div class="price-grid" style="grid-template-columns:1fr;max-width:520px;margin-left:auto;margin-right:auto">
-      <div class="plan pop reveal">
-        <span class="tag">★ MIT licensed</span>
-        <div class="pname">🐤 Self-hosted</div>
-        <div class="price">$0</div>
-        <div class="pdesc">The full tool, running on your own machine or server.</div>
-        <ul>
-          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>Uptime &amp; broken-link monitoring</li>
-          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>Scheduled crawls of your whole site</li>
-          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>Slack, email &amp; webhook alerts</li>
-          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>SSL &amp; domain-expiry checks</li>
-          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>Self-hosted, so your data never leaves your servers</li>
-        </ul>
-        <a href="https://github.com/LinkCanary/LinkCanary" target="_blank" rel="noopener noreferrer" class="btn btn-primary">Get it on GitHub →</a>
+      <span class="eyebrow" style="justify-content:center">Simple, flock-friendly pricing</span>
+      <h2>Start free. Grow when you do.</h2>
+      <div class="toggle" id="toggle">
+        <button class="active" data-p="mo">Monthly</button>
+        <button data-p="yr">Yearly <span class="save">–20%</span></button>
       </div>
     </div>
-    <p style="text-align:center;color:var(--dim);font-family:'JetBrains Mono',monospace;font-size:12.5px;margin-top:28px">MIT licensed · Star us on GitHub · Contributions welcome</p>
+    <div class="price-grid">
+      <div class="plan reveal">
+        <div class="pname">🥚 Hatchling</div>
+        <div class="price" data-mo="$0" data-yr="$0">$0</div>
+        <div class="pdesc">For side-projects and personal sites finding their feet.</div>
+        <ul>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>50 monitored checks</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>5-minute check interval</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>Email alerts</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>1 public status page</li>
+        </ul>
+        <a href="https://github.com/LinkCanary/LinkCanary" target="_blank" rel="noopener noreferrer" class="btn btn-ghost">Start free</a>
+      </div>
+      <div class="plan pop reveal">
+        <span class="tag">★ Most popular</span>
+        <div class="pname">🐤 Songbird</div>
+        <div class="price" data-mo="$19" data-yr="$15">$19<small>/mo</small></div>
+        <div class="pdesc">For growing sites and teams that can't afford to go dark.</div>
+        <ul>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>500 monitored checks</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>1-minute interval + multi-region</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>All alert channels (Slack, SMS…)</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>SSL &amp; domain expiry monitoring</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>1-year history &amp; SLA reports</li>
+        </ul>
+        <a href="https://github.com/LinkCanary/LinkCanary" target="_blank" rel="noopener noreferrer" class="btn btn-primary">Start 14-day trial</a>
+      </div>
+      <div class="plan reveal">
+        <div class="pname">🦅 Flock</div>
+        <div class="price" data-mo="$79" data-yr="$63">$79<small>/mo</small></div>
+        <div class="pdesc">For agencies and platforms watching many sites at scale.</div>
+        <ul>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>5,000 monitored checks</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>30-second interval</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>SSO, team roles &amp; audit log</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>Full REST API &amp; webhooks</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>Priority support &amp; onboarding</li>
+        </ul>
+        <a href="https://github.com/LinkCanary/LinkCanary" target="_blank" rel="noopener noreferrer" class="btn btn-ghost">Start trial</a>
+      </div>
+    </div>
+    <p style="text-align:center;color:var(--dim);font-family:'JetBrains Mono',monospace;font-size:12.5px;margin-top:28px">All plans include unlimited team members · Cancel anytime · 30-day money-back guarantee</p>
   </div>
 </section>
 
