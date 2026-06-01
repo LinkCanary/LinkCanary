@@ -22,6 +22,15 @@ class Settings(BaseSettings):
     use_celery: bool = False
     celery_broker_url: str = "redis://localhost:6379/0"
     celery_result_backend: str = "redis://localhost:6379/0"
+
+    # Report storage: "local" (filesystem) or "s3" (S3 / Cloudflare R2)
+    storage_backend: str = "local"
+    s3_bucket: Optional[str] = None
+    s3_endpoint_url: Optional[str] = None
+    s3_region: str = "auto"
+    s3_access_key_id: Optional[str] = None
+    s3_secret_access_key: Optional[str] = None
+    s3_prefix: str = "crawls/"
     
     report_retention_days: int = 90
     max_storage_mb: int = 1000
@@ -45,6 +54,16 @@ class Settings(BaseSettings):
             return self.database_url
         db_path = self.data_dir / "linkcanary.db"
         return f"sqlite+aiosqlite:///{db_path}"
+
+    @property
+    def sync_db_url(self) -> str:
+        """Synchronous driver URL for the Celery worker / Alembic."""
+        url = self.db_url
+        if "+aiosqlite" in url:
+            return url.replace("+aiosqlite", "")
+        if "+asyncpg" in url:
+            return url.replace("+asyncpg", "+psycopg")
+        return url
     
     @property
     def crawls_dir(self) -> Path:

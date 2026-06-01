@@ -1,0 +1,68 @@
+# Local prod-like stack: Postgres + Redis + FastAPI API + Celery worker/beat.
+# Report storage defaults to the local filesystem; set the S3_* vars in .env to
+# use Cloudflare R2 / S3 instead. Bring it up with: docker compose up --build
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-linkcanary}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-linkcanary}
+      POSTGRES_DB: ${POSTGRES_DB:-linkcanary}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-linkcanary}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    env_file: .env
+    command: sh -c "alembic upgrade head && uvicorn linkcanary_ui.main:app --host 0.0.0.0 --port 3000"
+    ports:
+      - "3000:3000"
+    volumes:
+      - reportdata:/root/.linkcanary
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: .
+    env_file: .env
+    command: celery -A linkcanary_ui.tasks.celery_app:celery_app worker --loglevel=info
+    volumes:
+      - reportdata:/root/.linkcanary
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Celery Beat — scheduled jobs (report retention, usage-counter resets).
+  # No periodic tasks are registered yet; included for the upcoming phases.
+  beat:
+    build: .
+    env_file: .env
+    command: celery -A linkcanary_ui.tasks.celery_app:celery_app beat --loglevel=info
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  redisdata:
+  reportdata:
