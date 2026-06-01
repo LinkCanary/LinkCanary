@@ -9,6 +9,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import Crawl, CrawlStatus, get_db
+from ..storage import get_storage
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
@@ -25,13 +26,14 @@ async def download_csv(
     if not crawl:
         raise HTTPException(status_code=404, detail="Crawl not found")
     
-    if not crawl.report_csv_path or not os.path.exists(crawl.report_csv_path):
+    storage = get_storage()
+    if not crawl.report_csv_path or not storage.exists(crawl.report_csv_path):
         raise HTTPException(status_code=404, detail="CSV report not available")
     
     filename = f"linkcanary_report_{crawl.name}_{crawl.created_at.strftime('%Y%m%d')}.csv"
     
     return FileResponse(
-        crawl.report_csv_path,
+        storage.localize(crawl.report_csv_path),
         media_type="text/csv",
         filename=filename,
     )
@@ -49,16 +51,22 @@ async def download_html(
     if not crawl:
         raise HTTPException(status_code=404, detail="Crawl not found")
     
-    if not crawl.report_html_path or not os.path.exists(crawl.report_html_path):
-        if crawl.report_csv_path and os.path.exists(crawl.report_csv_path):
+    storage = get_storage()
+    if not crawl.report_html_path or not storage.exists(crawl.report_html_path):
+        if crawl.report_csv_path and storage.exists(crawl.report_csv_path):
             from link_checker.html_reporter import HTMLReportGenerator
-            
-            html_path = crawl.report_csv_path.replace('.csv', '.html')
+            import tempfile
+
+            local_csv = storage.localize(crawl.report_csv_path)
+            fd, local_html = tempfile.mkstemp(suffix=".html")
+            os.close(fd)
             reporter = HTMLReportGenerator()
-            reporter.load_csv(crawl.report_csv_path)
-            reporter.generate_html(html_path)
-            
-            crawl.report_html_path = html_path
+            reporter.load_csv(local_csv)
+            reporter.generate_html(local_html)
+
+            html_key = f"{crawl_id}/report.html"
+            storage.put_file(html_key, local_html)
+            crawl.report_html_path = html_key
             await db.commit()
         else:
             raise HTTPException(status_code=404, detail="Report not available")
@@ -66,7 +74,7 @@ async def download_html(
     filename = f"linkcanary_report_{crawl.name}_{crawl.created_at.strftime('%Y%m%d')}.html"
     
     return FileResponse(
-        crawl.report_html_path,
+        storage.localize(crawl.report_html_path),
         media_type="text/html",
         filename=filename,
     )

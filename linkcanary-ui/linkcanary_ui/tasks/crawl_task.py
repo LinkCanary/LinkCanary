@@ -20,9 +20,9 @@ from link_checker.sitemap import SitemapParser
 from ..config import settings
 from ..models import Crawl, CrawlStatus
 from ..services.webhooks import webhook_service
+from ..storage import get_storage
 
-sync_db_url = settings.db_url.replace("+aiosqlite", "")
-sync_engine = create_engine(sync_db_url)
+sync_engine = create_engine(settings.sync_db_url)
 
 _running_tasks = {}
 
@@ -243,8 +243,14 @@ def _run_crawl_sync(crawl_id: str):
         html_reporter.load_csv(str(csv_path))
         html_reporter.generate_html(str(html_path))
 
-        crawl.report_csv_path = str(csv_path)
-        crawl.report_html_path = str(html_path)
+        storage = get_storage()
+        csv_key = f"{crawl_id}/report.csv"
+        html_key = f"{crawl_id}/report.html"
+        storage.put_file(csv_key, str(csv_path))
+        storage.put_file(html_key, str(html_path))
+
+        crawl.report_csv_path = csv_key
+        crawl.report_html_path = html_key
         crawl.issues_critical = summary.get('critical', 0)
         crawl.issues_high = summary.get('high', 0)
         crawl.issues_medium = summary.get('medium', 0)

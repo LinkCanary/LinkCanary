@@ -21,6 +21,7 @@ from ..models.schemas import (
     ValidateSitemapRequest,
     ValidateSitemapResponse,
 )
+from ..storage import get_storage
 from ..tasks.crawl_task import run_crawl_in_background
 
 router = APIRouter(prefix="/api/crawls", tags=["crawls"])
@@ -216,7 +217,7 @@ async def get_report(
     
     issues = []
     try:
-        with open(crawl.report_csv_path, newline='', encoding='utf-8') as f:
+        with open(get_storage().localize(crawl.report_csv_path), newline='', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             for row in reader:
                 example_pages = row.get('example_pages', '')
@@ -265,7 +266,7 @@ async def get_transparency(
 
     if crawl.report_csv_path:
         try:
-            with open(crawl.report_csv_path, newline='', encoding='utf-8') as f:
+            with open(get_storage().localize(crawl.report_csv_path), newline='', encoding='utf-8') as f:
                 reader = csv.DictReader(f)
                 for row in reader:
                     code = row.get('status_code', '0')
@@ -366,7 +367,7 @@ async def get_shared_report(
 
     issues = []
     try:
-        with open(crawl.report_csv_path, newline='', encoding='utf-8') as f:
+        with open(get_storage().localize(crawl.report_csv_path), newline='', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             for row in reader:
                 example_pages = row.get('example_pages', '')
