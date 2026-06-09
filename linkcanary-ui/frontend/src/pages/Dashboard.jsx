@@ -291,6 +291,14 @@ export default function Dashboard() {
         <p className="text-gray-500 dark:text-secondary/70">Broken link detection for teams who ship.</p>
       </div>
 
+      <Card className="border-l-4 border-primary/60">
+        <CardBody>
+          <p className="text-sm leading-relaxed text-gray-600 dark:text-secondary/80">
+            A 2024 <span className="font-semibold text-dark dark:text-primary">Pew Research</span> analysis of nearly one million webpages found that <span className="font-semibold text-dark dark:text-primary">25% of all pages from 2013–2023 are no longer accessible</span>, with 38% of 2013-era content gone a decade later and about <span className="font-semibold text-dark dark:text-primary">one in five pages from 2021 already inaccessible just two years later</span>. Link health is no better: Pew reports <span className="font-semibold text-dark dark:text-primary">23% of news pages and 21% of government pages contain at least one broken link</span>, and 54% of Wikipedia references link to dead pages. Link monitoring provider <span className="font-semibold text-dark dark:text-primary">Linkody</span> finds that <span className="font-semibold text-dark dark:text-primary">8% of links break within the first three months</span>. And according to Axios analysis of Similarweb data, <span className="font-semibold text-dark dark:text-primary">traffic to top websites has fallen more than 11% over five years</span> even as overall internet use stays flat — what Axios calls "web rot rising."
+          </p>
+        </CardBody>
+      </Card>
+
       <Card>
         <CardBody>
           <h2 className="text-xl font-semibold text-dark dark:text-primary mb-4">Quick Start</h2>
