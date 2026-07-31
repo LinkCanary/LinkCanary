@@ -30,6 +30,7 @@ AUTH_PASS="${INPUT_AUTH_PASS:-}"
 AUTH_HEADER="${INPUT_AUTH_HEADER:-}"
 COOKIE="${INPUT_COOKIE:-}"
 WEBHOOK_URL="${INPUT_WEBHOOK_URL:-}"
+CRAWL_ENGINE="${INPUT_CRAWL_ENGINE:-auto}"
 
 # Determine output file extension based on format
 case "$FORMAT" in
@@ -57,6 +58,7 @@ ARGS="$ARGS --max-retries ${MAX_RETRIES}"
 ARGS="$ARGS --retry-delay ${RETRY_DELAY}"
 ARGS="$ARGS --retry-backoff ${RETRY_BACKOFF}"
 ARGS="$ARGS --ci"
+ARGS="$ARGS --crawl-engine ${CRAWL_ENGINE}"
 
 # Handle input mode
 if [ -n "$SINGLE_URL" ]; then
@@ -145,6 +147,7 @@ fi
 # Run LinkCanary
 echo "Running LinkCanary..."
 echo "Sitemap: ${SITEMAP_URL}"
+echo "Crawl engine: ${CRAWL_ENGINE}"
 echo "Fail on priority: ${FAIL_ON}"
 echo "Format: ${FORMAT}"
 if [ -n "$EXCLUDE_PATTERNS" ]; then
