@@ -8,3 +8,6 @@ venv/
 *.egg
 .eggs/
 .factory/
+
+# Go crawl-engine binary (source is tracked, binary is not)
+crawl-engine/crawl-engine

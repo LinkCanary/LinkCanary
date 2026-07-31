@@ -199,6 +199,28 @@ class PageCrawler:
             return []
         
         return self.extract_links(url, html)
+
+    def crawl_page_with_html(
+        self,
+        url: str,
+    ) -> tuple[list[ExtractedLink], Optional[str]]:
+        """Crawl a page and return both extracted links and the raw HTML.
+
+        Used by the semantic-duplicate feature, which needs the page body
+        text for embedding in addition to the link list. Avoids a second
+        HTTP fetch when `--embeddings` is enabled.
+
+        Args:
+            url: The page URL to crawl.
+
+        Returns:
+            Tuple of (links, html_or_none). `html` is None if the fetch
+            failed or the response was not HTML.
+        """
+        html = self.fetch_page(url)
+        if html is None:
+            return [], None
+        return self.extract_links(url, html), html
     
     def crawl_pages(
         self,

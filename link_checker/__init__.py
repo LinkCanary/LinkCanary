@@ -6,6 +6,16 @@ from .exporters import ExportFormat, ReportExporter, detect_format
 from .patterns import URLPatternMatcher, PRESET_PATTERNS
 from .robots import RobotsComplianceChecker, RobotsTxtParser
 from .webhook_dispatcher import WebhookDispatcher, WebhookProvider
+from .embeddings import (
+    EmbeddingProvider,
+    EmbeddingError,
+    OllamaProvider,
+    OpenAIProvider,
+    GeminiProvider,
+)
+from .embedding_cache import EmbeddingCache
+from .embedding_history import EmbeddingHistory
+from .crawl_engine import CrawlEngineResult, find_crawl_engine, is_available
 
 __all__ = [
     "ExportFormat",
@@ -17,4 +27,14 @@ __all__ = [
     "detect_format",
     "WebhookDispatcher",
     "WebhookProvider",
+    "EmbeddingProvider",
+    "EmbeddingError",
+    "OllamaProvider",
+    "OpenAIProvider",
+    "GeminiProvider",
+    "EmbeddingCache",
+    "EmbeddingHistory",
+    "CrawlEngineResult",
+    "find_crawl_engine",
+    "is_available",
 ]
