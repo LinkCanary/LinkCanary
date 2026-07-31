@@ -226,6 +226,7 @@ linkcanary-ui
 | `--outlier-threshold` | `2.0` | Std-dev multiplier for off-topic outlier detection. Env: `OUTLIER_THRESHOLD` |
 | `--ollama-url` | `http://localhost:11434` | Ollama API base URL. Env: `OLLAMA_URL` |
 | `--max-content-chars` | `8000` | Max chars of page text to embed per page. Env: `MAX_CONTENT_CHARS` |
+| `--crawl-engine` | `auto` | Use Go binary for crawling/checking (`auto`, `go`, `python`). `auto` uses Go if available, falls back to Python. Env: `CRAWL_ENGINE` |
 
 ---
 
@@ -377,6 +378,55 @@ The `pair_status` column in the CSV/JSON report and the badge in the HTML report
 ### Exit code
 
 Semantic findings produce exit code `3` (distinct from `1` for broken links and `2` for crawl failure), so CI can fail on duplicates without failing on dead links, or vice versa.
+
+---
+
+## Go Crawl Engine
+
+LinkCanary ships an optional Go binary that handles the I/O-intensive crawl-and-check pipeline (sitemap fetch, page crawling, link checking, robots.txt compliance). The Python layer handles reporting, exports, and semantic detection, so both engines produce identical reports.
+
+### Why a Go engine?
+
+The Python pipeline is single-threaded with per-host rate limiting. On large sites (1,000+ pages), the crawl and link-check phases dominate runtime. The Go binary uses a concurrent worker pool for link checking, reducing wall time significantly on multi-core machines.
+
+### Building the Go binary
+
+```bash
+cd crawl-engine
+go build -o crawl-engine .
+```
+
+The binary is discovered automatically:
+1. `crawl-engine/crawl-engine` (local build, relative to the repo root)
+2. `linkcanary-crawl-engine` or `crawl-engine` on `$PATH`
+
+### Usage
+
+```bash
+# Auto-detect: uses Go binary if found, falls back to Python
+linkcheck https://yoursite.com/sitemap.xml
+
+# Force the Go engine
+linkcheck https://yoursite.com/sitemap.xml --crawl-engine go
+
+# Force the Python pipeline
+linkcheck https://yoursite.com/sitemap.xml --crawl-engine python
+```
+
+The `CRAWL_ENGINE` environment variable provides the same control:
+
+```bash
+export CRAWL_ENGINE=go
+linkcheck https://yoursite.com/sitemap.xml
+```
+
+### Docker
+
+The Dockerfile uses a multi-stage build: `golang:1.23-alpine` compiles a static binary, then copies it into the `python:3.11-slim` runtime image at `/usr/local/bin/linkcanary-crawl-engine`. The Go engine is available automatically in containerized runs.
+
+### How it works
+
+The Go binary handles sitemap parsing, page crawling, link extraction, robots.txt compliance, and link checking (HEAD/GET fallback, redirect tracing, retry with exponential backoff, 429 rate-limit handling). It outputs JSON to stdout, which the Python CLI parses and feeds into the existing reporter/exporter/embeddings pipeline. This keeps the report format identical regardless of which engine is used.
 
 ---
 
