@@ -11,6 +11,7 @@ import pandas as pd
 from .checker import LinkStatus
 from .crawler import ExtractedLink
 from .fp_logger import FPLogger
+from .similarity import OutlierResult, SimilarityPair
 from .utils import normalize_url
 
 logger = logging.getLogger(__name__)
@@ -52,6 +53,8 @@ class ReportRow:
     recommended_fix: str
     response_time_ms: Optional[float] = None
     anchor_quality: str = ''
+    similarity_score: Optional[float] = None
+    pair_status: str = ''  # "new", "persistent", "resolved", or ""
 
 
 class ReportGenerator:
@@ -420,6 +423,90 @@ class ReportGenerator:
 
         return pd.DataFrame([vars(row) for row in rows])
 
+    # Semantic duplicate / off-topic outlier reporting
+    def generate_similarity_report(
+        self,
+        pairs: list[SimilarityPair],
+        outliers: list[OutlierResult],
+    ) -> pd.DataFrame:
+        """Build a report DataFrame from semantic similarity findings.
+
+        Reuses the `ReportRow` schema so the result can be concatenated
+        onto the main report (same pattern as `generate_orphan_report`).
+
+        - Each similar pair becomes one row with `issue_type='semantic_duplicate'`,
+          the first URL in `link_url`, the paired URL in `final_url`, and the
+          cosine similarity in `similarity_score`.
+        - Each outlier becomes one row with `issue_type='off_topic'`,
+          the URL in `link_url`, and the distance-from-centroid in
+          `similarity_score`.
+
+        Args:
+            pairs: Similar page pairs from `similarity.find_similar_pairs`.
+            outliers: Off-topic pages from `similarity.find_outliers`.
+
+        Returns:
+            DataFrame with the same columns as `generate_report()`.
+        """
+        empty_cols = [f.name for f in dataclass_fields(ReportRow)]
+        if not pairs and not outliers:
+            return pd.DataFrame(columns=empty_cols)
+
+        _PAIR_FIX = (
+            'Two pages have semantically overlapping content. '
+            'Consolidate, differentiate with distinct keywords, or canonicalize '
+            'one to the other to avoid keyword cannibalization.'
+        )
+        _OUTLIER_FIX = (
+            'This page sits far from the rest of the site topical centroid. '
+            'It may be off-topic, low on unique content, or an orphaned template '
+            'page. Review whether it should be expanded, redirected, or removed.'
+        )
+
+        rows: list[ReportRow] = []
+        for pair in pairs:
+            rows.append(ReportRow(
+                source_page='',
+                occurrence_count=1,
+                example_pages='',
+                link_url=pair.url_a,
+                link_text='',
+                link_type='internal',
+                element_type='',
+                status_code=0,
+                issue_type='semantic_duplicate',
+                priority='info',
+                redirect_chain='',
+                final_url=pair.url_b,
+                recommended_fix=_PAIR_FIX,
+                response_time_ms=None,
+                anchor_quality='',
+                similarity_score=pair.similarity,
+                pair_status=pair.status,
+            ))
+        for outlier in outliers:
+            rows.append(ReportRow(
+                source_page='',
+                occurrence_count=1,
+                example_pages='',
+                link_url=outlier.url,
+                link_text='',
+                link_type='internal',
+                element_type='',
+                status_code=0,
+                issue_type='off_topic',
+                priority='info',
+                redirect_chain='',
+                final_url='',
+                recommended_fix=_OUTLIER_FIX,
+                response_time_ms=None,
+                anchor_quality='',
+                similarity_score=outlier.distance_from_centroid,
+                pair_status=outlier.status,
+            ))
+
+        return pd.DataFrame([vars(row) for row in rows])
+
     def save_report(self, df: pd.DataFrame, output_path: str):
         """Save the report to a CSV file."""
         df.to_csv(output_path, index=False)
@@ -443,6 +530,8 @@ class ReportGenerator:
                 'mixed_content': 0,
                 'orphaned_pages': 0,
                 'preview_404': 0,
+                'semantic_duplicates': 0,
+                'off_topic': 0,
                 'critical': 0,
                 'high': 0,
                 'medium': 0,
@@ -468,6 +557,8 @@ class ReportGenerator:
             'mixed_content': issue_counts.get('mixed_content', 0),
             'orphaned_pages': issue_counts.get('orphaned_page', 0),
             'preview_404': issue_counts.get('preview_404', 0),
+            'semantic_duplicates': issue_counts.get('semantic_duplicate', 0),
+            'off_topic': issue_counts.get('off_topic', 0),
             'critical': priority_counts.get('critical', 0),
             'high': priority_counts.get('high', 0),
             'medium': priority_counts.get('medium', 0),
