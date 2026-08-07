@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from . import __version__
-from .api import backlinks, crawls, reports, settings as settings_api, stats, url_resolution, websocket, webhooks, mcp
+from .api import account, backlinks, billing, crawls, reports, settings as settings_api, stats, url_resolution, websocket, webhooks, mcp
 from .config import settings
 from .models import init_db
 
@@ -36,13 +36,20 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",  # Vite dev server
+        "http://localhost:80",    # Caddy
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+app.include_router(account.router)
 app.include_router(backlinks.router)
+app.include_router(billing.router)
 app.include_router(crawls.router)
 app.include_router(reports.router)
 app.include_router(stats.router)
@@ -80,6 +87,28 @@ async def vite_svg():
 async def health():
     """Health check endpoint."""
     return {"status": "ok"}
+
+
+# SPA fallback — serve index.html for client-side routes so React Router handles them.
+# Must be registered AFTER all API routes and static mounts.
+SPA_ROUTES = {
+    "/signup", "/login", "/forgot-password", "/reset-password", "/verify-email",
+    "/dashboard", "/crawl", "/reports", "/report", "/backlinks", "/url-resolution",
+    "/settings", "/integrations", "/ci-setup", "/account", "/share",
+}
+
+
+@app.get("/{full_path:path}")
+async def spa_fallback(full_path: str):
+    """Serve index.html for any client-side route that doesn't match an API endpoint."""
+    index_path = static_dir / "index.html"
+    # Only serve the SPA for known client routes or non-API paths
+    if index_path.exists() and (
+        any(full_path.startswith(route.lstrip("/")) for route in SPA_ROUTES)
+        or "/" not in full_path  # top-level paths like /dashboard
+    ):
+        return FileResponse(index_path)
+    raise HTTPException(status_code=404)
 
 
 def cli():
