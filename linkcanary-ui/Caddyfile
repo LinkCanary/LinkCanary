@@ -1,0 +1,24 @@
+# Caddy reverse proxy for LinkCanary
+# In production, replace :80 with your domain: linkcanary.io { ... }
+
+:80 {
+    # Better Auth service — mounted at /auth
+    handle /auth/* {
+        reverse_proxy auth:3001
+    }
+
+    # Everything else → FastAPI (which serves the SPA static files + API)
+    handle {
+        reverse_proxy api:3000
+    }
+}
+
+# Production example (uncomment and replace :80 block above):
+# app.linkcanary.io {
+#     handle /auth/* {
+#         reverse_proxy auth:3001
+#     }
+#     handle {
+#         reverse_proxy api:3000
+#     }
+# }
