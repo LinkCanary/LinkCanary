@@ -43,7 +43,13 @@ class Settings(BaseSettings):
     webhook_enabled: bool = True
     webhook_timeout: int = 10
     webhook_retry_count: int = 3
-    
+
+    # Auth
+    auth_url: str = "http://auth:3001/auth"
+    auth_webhook_secret: Optional[str] = None
+    stripe_secret_key: Optional[str] = None
+    stripe_webhook_secret: Optional[str] = None
+
     class Config:
         env_prefix = "LINKCANARY_"
         env_file = ".env"
