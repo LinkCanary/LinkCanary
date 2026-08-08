@@ -34,6 +34,7 @@ LinkCanary crawls your website via sitemap, checks every link on every page, and
 - **Actionable fix recommendations** — each issue includes a suggested resolution
 - **Occurrence tracking** — shows how many pages contain each bad link, so you can prioritize the most widespread problems
 - **CSV + interactive HTML reports** — share with your team or clients, or plug into your workflow
+- **Migration verification** — ingest any `migration-report.json` (open standard v1.0, produced by Portage or any migration tool) and cross-reference every migrated URL against what actually resolves: destinations that 404, redirects that don't happen, and content that should be gone but is still live
 - **Semantic duplicate & off-topic detection** — compute page embeddings (Ollama by default) and flag near-duplicate page pairs and topical outliers that plain text matching misses
 - **Web-based UI** — run audits without touching the terminal
 
@@ -54,6 +55,37 @@ linkcheck https://yoursite.com/sitemap.xml --skip-ok --html-report report.html -
 ```
 
 That's it. LinkCanary will crawl every page in your sitemap, check every link on every page, and open an interactive HTML report in your browser when it's done.
+
+---
+
+## Migration Verification
+
+After any content migration, the question is not "did the files move" but "does every old URL land where it should". LinkCanary answers that with `--verify-migration`: it reads the migration report produced by your migration tool and checks each record against the live site.
+
+```bash
+linkcheck --verify-migration migration-report.json
+# or point at a staging/preview build
+linkcheck --verify-migration migration-report.json --site https://staging.example.com
+```
+
+The migration report is the open **Migration Report Schema v1.0** (`migration-report.json`) — one record per migrated source URL with its destination path and status. Any tool can produce it; [Portage](https://github.com/chesterbeard/portage) does, and its companion `portage slug-audit` generates the redirect rules (Nginx, Caddy, Netlify, Cloudflare Pages) from the same report. The workflow:
+
+```text
+portage load            # migrate → writes migration-report.json
+portage slug-audit      # same report → redirect rules
+linkcheck --verify-migration migration-report.json   # prove it landed
+```
+
+What verification checks, per record status:
+
+| Record status | Expectation | Verified when | Flagged as |
+| :--- | :--- | :--- | :--- |
+| `migrated` | content at destination | destination 2xx | `missing` (4xx/5xx destination) |
+| `redirected` | old URL points at destination | source 3xx → 2xx **and** destination 2xx | `redirect_missing` |
+| `quarantined` / `excluded` | content should be gone | source 4xx/5xx | `unexpected_live` (still resolves) |
+| `failed` | needs human review | — | `review` |
+
+Two records landing on the same destination path are flagged as `collision`. Results are written to `migration-verification.csv`, and the exit code is 0 only when every record verifies — ready for CI.
 
 ---
 
@@ -471,6 +503,6 @@ MIT — use it however you want, commercially or otherwise.
 ---
 
 <p align="center">
-  <strong>Migrated your site recently? Don't wait for your traffic to drop.</strong><br>
-  Run `linkcheck https://yoursite.com/sitemap.xml` and find out what's broken.
+  <strong>Verify your migration with LinkCanary.</strong><br>
+  Run `linkcheck --verify-migration migration-report.json` and prove every URL landed.
 </p>
