@@ -34,6 +34,8 @@ LinkCanary crawls your website via sitemap, checks every link on every page, and
 - **Actionable fix recommendations** — each issue includes a suggested resolution
 - **Occurrence tracking** — shows how many pages contain each bad link, so you can prioritize the most widespread problems
 - **CSV + interactive HTML reports** — share with your team or clients, or plug into your workflow
+- **Migration verification** — ingest any `migration-report.json` (open standard v1.0, produced by Portage or any migration tool) and cross-reference every migrated URL against what actually resolves: destinations that 404, redirects that don't happen, and content that should be gone but is still live
+- **Semantic duplicate & off-topic detection** — compute page embeddings (Ollama by default) and flag near-duplicate page pairs and topical outliers that plain text matching misses
 - **Web-based UI** — run audits without touching the terminal
 
 ---
@@ -53,6 +55,37 @@ linkcheck https://yoursite.com/sitemap.xml --skip-ok --html-report report.html -
 ```
 
 That's it. LinkCanary will crawl every page in your sitemap, check every link on every page, and open an interactive HTML report in your browser when it's done.
+
+---
+
+## Migration Verification
+
+After any content migration, the question is not "did the files move" but "does every old URL land where it should". LinkCanary answers that with `--verify-migration`: it reads the migration report produced by your migration tool and checks each record against the live site.
+
+```bash
+linkcheck --verify-migration migration-report.json
+# or point at a staging/preview build
+linkcheck --verify-migration migration-report.json --site https://staging.example.com
+```
+
+The migration report is the open **Migration Report Schema v1.0** (`migration-report.json`) — one record per migrated source URL with its destination path and status. Any tool can produce it; [Portage](https://github.com/chesterbeard/portage) does, and its companion `portage slug-audit` generates the redirect rules (Nginx, Caddy, Netlify, Cloudflare Pages) from the same report. The workflow:
+
+```text
+portage load            # migrate → writes migration-report.json
+portage slug-audit      # same report → redirect rules
+linkcheck --verify-migration migration-report.json   # prove it landed
+```
+
+What verification checks, per record status:
+
+| Record status | Expectation | Verified when | Flagged as |
+| :--- | :--- | :--- | :--- |
+| `migrated` | content at destination | destination 2xx | `missing` (4xx/5xx destination) |
+| `redirected` | old URL points at destination | source 3xx → 2xx **and** destination 2xx | `redirect_missing` |
+| `quarantined` / `excluded` | content should be gone | source 4xx/5xx | `unexpected_live` (still resolves) |
+| `failed` | needs human review | — | `review` |
+
+Two records landing on the same destination path are flagged as `collision`. Results are written to `migration-verification.csv`, and the exit code is 0 only when every record verifies — ready for CI.
 
 ---
 
@@ -139,6 +172,19 @@ linkcheck https://example.com/sitemap.xml --since 2025-01-01
 
 # Full audit with HTML report
 linkcheck https://example.com/sitemap.xml --html-report report.html --open
+
+# Semantic duplicate + off-topic detection (requires Ollama running locally)
+linkcheck https://example.com/sitemap.xml \
+  --embeddings \
+  --embeddings-provider ollama \
+  --embeddings-model nomic-embed-text \
+  --similarity-threshold 0.95 \
+  --outlier-threshold 2.0 \
+  --html-report report.html --open
+
+# Semantic detection with OpenAI (requires OPENAI_API_KEY)
+linkcheck https://example.com/sitemap.xml \
+  --embeddings --embeddings-provider openai --html-report report.html --open
 ```
 
 ### Generate HTML Report from Existing CSV
@@ -201,6 +247,18 @@ linkcanary-ui
 | `--html-report` | none | Generate HTML report at specified path |
 | `--open` | `false` | Open HTML report in browser after generation |
 | `--test-urls URL [URL ...]` | none | Diagnostic: test URL resolution against given base URLs |
+| `--embeddings` | `false` | Enable semantic duplicate / off-topic detection. Env: `EMBEDDINGS_ENABLED` |
+| `--embeddings-provider` | `ollama` | Embedding backend (`ollama`, `openai`, `gemini`). Env: `EMBEDDINGS_PROVIDER` |
+| `--embeddings-model` | provider-specific | Embedding model name. Env: `EMBEDDINGS_MODEL` |
+| `--openai-api-key` | none | OpenAI API key (provider=openai). Env: `OPENAI_API_KEY` |
+| `--gemini-api-key` | none | Gemini API key (provider=gemini). Env: `GEMINI_API_KEY` |
+| `--embeddings-cache` | `<report>.embeddings.json` | Path to content-addressed embedding cache. Use `none` to disable. Env: `EMBEDDINGS_CACHE` |
+| `--embeddings-history` | `<report>.embeddings.history.json` | Path to run-history file for new-vs-persistent diffing. Use `none` to disable. Env: `EMBEDDINGS_HISTORY` |
+| `--similarity-threshold` | `0.95` | Cosine similarity threshold for flagging near-duplicate pairs. Env: `SIMILARITY_THRESHOLD` |
+| `--outlier-threshold` | `2.0` | Std-dev multiplier for off-topic outlier detection. Env: `OUTLIER_THRESHOLD` |
+| `--ollama-url` | `http://localhost:11434` | Ollama API base URL. Env: `OLLAMA_URL` |
+| `--max-content-chars` | `8000` | Max chars of page text to embed per page. Env: `MAX_CONTENT_CHARS` |
+| `--crawl-engine` | `auto` | Use Go binary for crawling/checking (`auto`, `go`, `python`). `auto` uses Go if available, falls back to Python. Env: `CRAWL_ENGINE` |
 
 ---
 
@@ -214,11 +272,13 @@ LinkCanary outputs a CSV (and optionally an interactive HTML report) with the fo
 | `occurrence_count` | Number of pages containing this link |
 | `link_url` | The broken or redirecting URL |
 | `status_code` | HTTP response code |
-| `issue_type` | `broken` · `redirect` · `redirect_chain` · `canonical_redirect` · `redirect_loop` · `ok` |
+| `issue_type` | `broken` · `redirect` · `redirect_chain` · `canonical_redirect` · `redirect_loop` · `semantic_duplicate` · `off_topic` · `orphaned_page` · `ok` |
 | `priority` | `critical` · `high` · `medium` · `low` |
 | `redirect_chain` | Full redirect path with status codes (e.g., `301:url1 → 302:url2 → 200:url3`) |
 | `final_url` | Where the link ultimately resolves |
 | `recommended_fix` | Suggested action to resolve the issue |
+| `similarity_score` | Cosine similarity (for `semantic_duplicate`) or distance from centroid (for `off_topic`) |
+| `pair_status` | `new` · `persistent` · `resolved` — whether a semantic finding is new since the last run (requires `--embeddings-history`) |
 
 ### Exit Codes
 
@@ -227,8 +287,9 @@ LinkCanary outputs a CSV (and optionally an interactive HTML report) with the fo
 | `0` | No issues found |
 | `1` | Broken links or redirects detected |
 | `2` | Crawl failure (couldn't fetch sitemap or fatal error) |
+| `3` | Semantic duplicate / off-topic findings (no broken links) |
 
-Exit codes make it easy to integrate LinkCanary into CI/CD pipelines — fail the build if broken links are introduced.
+Exit codes make it easy to integrate LinkCanary into CI/CD pipelines — fail the build if broken links are introduced, or separately flag semantic duplicate content via exit code `3`.
 
 ---
 
@@ -276,6 +337,131 @@ The **Web UI** also includes a URL Resolution Tester (under Tools > URL Resoluti
 
 ---
 
+## Semantic Duplicate & Off-Topic Detection
+
+LinkCanary can compute an embedding for each crawled page's main content and use the resulting vectors to flag content that plain text matching misses:
+
+- **Near-duplicate pairs** — two URLs whose content overlaps enough to plausibly cannibalize each other in search. Reported as a pair with a cosine similarity score (default threshold `0.95`, matching Screaming Frog).
+- **Off-topic outliers** — pages whose embedding sits unusually far from the rest of the site's content centroid (default `2.0` standard deviations), which can indicate orphaned, boilerplate, or drifted content.
+- **New since last run** — on scheduled or CI crawls, LinkCanary compares the current run's findings against the prior run and tags each pair/outlier as `new`, `persistent`, or `resolved`. This is the check that doesn't exist in Screaming Frog's desktop model: SF re-surfaces every known duplicate on each manual run, while LinkCanary tells you "these two pages *became* similar since Tuesday" — a regression signal nobody catches until a client asks why two pages compete for the same keyword.
+
+### Provider
+
+| Provider | Default | Notes |
+|---|---|---|
+| `ollama` | yes | Local, no API key, no per-page cost. Pull the model with `ollama pull nomic-embed-text`. Matches LinkCanary's self-hosted, MIT, no-vendor-lock-in story. |
+| `openai` | opt-in | Cloud. Requires `OPENAI_API_KEY`. Default model `text-embedding-3-small`. Higher quality, per-token cost. |
+| `gemini` | opt-in | Cloud. Requires `GEMINI_API_KEY`. Default model `gemini-embedding-001`. Uses `SEMANTIC_SIMILARITY` task type. Per-token cost. |
+
+### Quick start
+
+```bash
+# 1. Install and run Ollama, then pull the embedding model
+ollama pull nomic-embed-text
+
+# 2. Run LinkCanary with --embeddings
+linkcheck https://yoursite.com/sitemap.xml --embeddings --html-report report.html --open
+```
+
+If Ollama is unreachable, LinkCanary prints a warning and skips semantic checks — the rest of the crawl and link check proceeds normally.
+
+### Cloud providers (OpenAI / Gemini)
+
+```bash
+# OpenAI
+export OPENAI_API_KEY="sk-..."
+linkcheck https://yoursite.com/sitemap.xml \
+  --embeddings --embeddings-provider openai --html-report report.html --open
+
+# Gemini
+export GEMINI_API_KEY="..."
+linkcheck https://yoursite.com/sitemap.xml \
+  --embeddings --embeddings-provider gemini --html-report report.html --open
+```
+
+### Embedding cache
+
+Embeddings are content-addressed: the cache is keyed by a SHA-256 hash of each page's extracted text, not the URL. This means a scheduled nightly crawl doesn't recompute (or re-pay for) embeddings on pages that haven't changed. The cache file defaults to `<report-stem>.embeddings.json` alongside the report, and is automatically invalidated when the model or provider changes (vectors from different models are not comparable).
+
+```bash
+# Use a custom cache location
+linkcheck https://yoursite.com/sitemap.xml --embeddings --embeddings-cache /tmp/lc-cache.json
+
+# Disable caching
+linkcheck https://yoursite.com/sitemap.xml --embeddings --embeddings-cache none
+```
+
+### New since last run (diffing)
+
+On scheduled or CI crawls, LinkCanary can diff the current run's semantic findings against the prior run and tag each pair and outlier as `new`, `persistent`, or `resolved`. This requires a run-history file, which defaults to `<report-stem>.embeddings.history.json` alongside the report:
+
+```bash
+# Enable diffing (history file is created/updated automatically)
+linkcheck https://yoursite.com/sitemap.xml \
+  --embeddings --embeddings-history /tmp/lc-history.json
+
+# Disable diffing
+linkcheck https://yoursite.com/sitemap.xml \
+  --embeddings --embeddings-history none
+```
+
+The `pair_status` column in the CSV/JSON report and the badge in the HTML report show whether each finding is new since the last run or a persistent known issue. The history file auto-invalidates when the model or provider changes (findings from different models are not comparable).
+
+### Exit code
+
+Semantic findings produce exit code `3` (distinct from `1` for broken links and `2` for crawl failure), so CI can fail on duplicates without failing on dead links, or vice versa.
+
+---
+
+## Go Crawl Engine
+
+LinkCanary ships an optional Go binary that handles the I/O-intensive crawl-and-check pipeline (sitemap fetch, page crawling, link checking, robots.txt compliance). The Python layer handles reporting, exports, and semantic detection, so both engines produce identical reports.
+
+### Why a Go engine?
+
+The Python pipeline is single-threaded with per-host rate limiting. On large sites (1,000+ pages), the crawl and link-check phases dominate runtime. The Go binary uses a concurrent worker pool for link checking, reducing wall time significantly on multi-core machines.
+
+### Building the Go binary
+
+```bash
+cd crawl-engine
+go build -o crawl-engine .
+```
+
+The binary is discovered automatically:
+1. `crawl-engine/crawl-engine` (local build, relative to the repo root)
+2. `linkcanary-crawl-engine` or `crawl-engine` on `$PATH`
+
+### Usage
+
+```bash
+# Auto-detect: uses Go binary if found, falls back to Python
+linkcheck https://yoursite.com/sitemap.xml
+
+# Force the Go engine
+linkcheck https://yoursite.com/sitemap.xml --crawl-engine go
+
+# Force the Python pipeline
+linkcheck https://yoursite.com/sitemap.xml --crawl-engine python
+```
+
+The `CRAWL_ENGINE` environment variable provides the same control:
+
+```bash
+export CRAWL_ENGINE=go
+linkcheck https://yoursite.com/sitemap.xml
+```
+
+### Docker
+
+The Dockerfile uses a multi-stage build: `golang:1.23-alpine` compiles a static binary, then copies it into the `python:3.11-slim` runtime image at `/usr/local/bin/linkcanary-crawl-engine`. The Go engine is available automatically in containerized runs.
+
+### How it works
+
+The Go binary handles sitemap parsing, page crawling, link extraction, robots.txt compliance, and link checking (HEAD/GET fallback, redirect tracing, retry with exponential backoff, 429 rate-limit handling). It outputs JSON to stdout, which the Python CLI parses and feeds into the existing reporter/exporter/embeddings pipeline. This keeps the report format identical regardless of which engine is used.
+
+---
+
 ## Use Cases
 
 - **Site migrations** — moved from Squarespace, WordPress, or another CMS? Verify that old URLs resolve correctly and catch the 404s and redirect loops that migrations inevitably create
@@ -296,6 +482,7 @@ The **Web UI** also includes a URL Resolution Tester (under Tools > URL Resoluti
 - `requests` — HTTP client
 - `beautifulsoup4` + `lxml` — HTML parsing
 - `pandas` — report generation
+- `numpy` — vector math for semantic similarity
 - `tqdm` — progress bars
 - `urllib3` — URL handling
 
@@ -316,6 +503,6 @@ MIT — use it however you want, commercially or otherwise.
 ---
 
 <p align="center">
-  <strong>Migrated your site recently? Don't wait for your traffic to drop.</strong><br>
-  Run `linkcheck https://yoursite.com/sitemap.xml` and find out what's broken.
+  <strong>Verify your migration with LinkCanary.</strong><br>
+  Run `linkcheck --verify-migration migration-report.json` and prove every URL landed.
 </p>

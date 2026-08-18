@@ -1,7 +1,9 @@
 """Command-line interface for LinkCanary."""
 
 import argparse
+import json
 import logging
+import os
 import sys
 from datetime import datetime
 
@@ -22,6 +24,15 @@ from .sitemap import SitemapParser
 EXIT_SUCCESS = 0
 EXIT_ISSUES_FOUND = 1
 EXIT_CRAWL_FAILURE = 2
+EXIT_SEMANTIC_ISSUES = 3
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    """Read a boolean env var. Treats 1/true/yes/on (case-insensitive) as True."""
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in ('1', 'true', 'yes', 'on')
 
 
 def setup_logging(verbose: bool):
@@ -48,7 +59,7 @@ def create_parser() -> argparse.ArgumentParser:
         description='LinkCanary - A link health checker that crawls websites via sitemap and identifies broken links and redirect chains.',
         epilog='Example: linkcheck https://example.com/sitemap.xml --internal-only --skip-ok',
     )
-    
+
     # Create mutually exclusive group for input sources
     input_group = parser.add_mutually_exclusive_group()
     input_group.add_argument(
@@ -66,89 +77,89 @@ def create_parser() -> argparse.ArgumentParser:
         metavar='FILE',
         help='Read URLs from a file (one per line). Useful for checking changed pages in PRs.',
     )
-    
+
     parser.add_argument(
         '-o', '--output',
         default='link_report.csv',
         help='Output file path (default: link_report.csv)',
     )
-    
+
     parser.add_argument(
         '-f', '--format',
         choices=['csv', 'json', 'mdx', 'xlsx', 'pdf'],
         default=None,
         help='Export format (auto-detected from output extension if not specified)',
     )
-    
+
     parser.add_argument(
         '--google-sheets',
         action='store_true',
         help='Export to Google Sheets (requires GOOGLE_APPLICATION_CREDENTIALS)',
     )
-    
+
     parser.add_argument(
         '-d', '--delay',
         type=float,
         default=0.5,
         help='Seconds between requests (default: 0.5)',
     )
-    
+
     parser.add_argument(
         '-t', '--timeout',
         type=int,
         default=10,
         help='Request timeout in seconds (default: 10)',
     )
-    
+
     parser.add_argument(
         '--max-retries',
         type=int,
         default=3,
         help='Max retries for transient errors 502/503/504 (default: 3)',
     )
-    
+
     parser.add_argument(
         '--retry-delay',
         type=float,
         default=1.0,
         help='Initial delay between retries in seconds (default: 1.0)',
     )
-    
+
     parser.add_argument(
         '--retry-backoff',
         type=float,
         default=2.0,
         help='Multiplier for exponential backoff (default: 2.0)',
     )
-    
+
     parser.add_argument(
         '--no-retry',
         action='store_true',
         help='Disable retries for transient errors',
     )
-    
+
     # Authentication options
-    auth_group = parser.add_argument_group('authentication', 
+    auth_group = parser.add_argument_group('authentication',
         'Options for authenticating with protected sites (staging, etc.)')
-    
+
     auth_group.add_argument(
         '--auth-user',
         metavar='USERNAME',
         help='Username for HTTP Basic Authentication',
     )
-    
+
     auth_group.add_argument(
         '--auth-pass',
         metavar='PASSWORD',
         help='Password for HTTP Basic Authentication (use --auth-pass-env for env var)',
     )
-    
+
     auth_group.add_argument(
         '--auth-pass-env',
         metavar='ENV_VAR',
         help='Environment variable name containing the auth password',
     )
-    
+
     auth_group.add_argument(
         '--header',
         action='append',
@@ -158,7 +169,7 @@ def create_parser() -> argparse.ArgumentParser:
         help='Custom header to add to requests. Can be repeated. '
              'Format: "Name: Value". Example: --header "Authorization: Bearer xxx"',
     )
-    
+
     auth_group.add_argument(
         '--cookie',
         action='append',
@@ -168,19 +179,19 @@ def create_parser() -> argparse.ArgumentParser:
         help='Cookie to add to requests. Can be repeated. '
              'Format: "name=value". Example: --cookie "session=abc123"',
     )
-    
+
     parser.add_argument(
         '--internal-only',
         action='store_true',
         help='Only check internal links',
     )
-    
+
     parser.add_argument(
         '--external-only',
         action='store_true',
         help='Only check external links',
     )
-    
+
     parser.add_argument(
         '--exclude-pattern',
         action='append',
@@ -189,7 +200,7 @@ def create_parser() -> argparse.ArgumentParser:
         help='Exclude URLs matching pattern (glob or regex). Can be repeated. '
              'Example: --exclude-pattern "*linkedin.com*" --exclude-pattern "*.pdf"',
     )
-    
+
     parser.add_argument(
         '--include-pattern',
         action='append',
@@ -198,64 +209,64 @@ def create_parser() -> argparse.ArgumentParser:
         help='Only check URLs matching pattern (glob or regex). Can be repeated. '
              'Example: --include-pattern "/blog/*" --include-pattern "/docs/*"',
     )
-    
+
     parser.add_argument(
         '--pattern-type',
         choices=['glob', 'regex'],
         default='glob',
         help='Pattern matching type (default: glob)',
     )
-    
+
     parser.add_argument(
         '--skip-ok',
         action='store_true',
         help='Exclude 200 OK links from report',
     )
-    
+
     parser.add_argument(
         '--max-pages',
         type=int,
         default=None,
         help='Limit pages to crawl (for testing)',
     )
-    
+
     parser.add_argument(
         '-v', '--verbose',
         action='store_true',
         help='Show detailed progress',
     )
-    
+
     parser.add_argument(
         '--user-agent',
         default='LinkCanary/1.0',
         help='Custom User-Agent string (default: LinkCanary/1.0)',
     )
-    
+
     parser.add_argument(
         '--expand-duplicates',
         action='store_true',
         help='Show all occurrences instead of aggregating',
     )
-    
+
     parser.add_argument(
         '--include-subdomains',
         action='store_true',
         help='Treat subdomains as internal links',
     )
-    
+
     parser.add_argument(
         '--ignore-robots',
         action='store_true',
         help='Ignore robots.txt rules (not recommended)',
     )
-    
+
     parser.add_argument(
         '--since',
         type=parse_date,
         default=None,
         help='Only crawl pages modified after date (YYYY-MM-DD)',
     )
-    
+
     parser.add_argument(
         '--version',
         action='version',
@@ -268,20 +279,20 @@ def create_parser() -> argparse.ArgumentParser:
         help='Skip orphaned page detection (sitemap mode only). '
              'Useful on very large sites where the extra processing time is not desired.',
     )
-    
+
     parser.add_argument(
         '--html-report',
         default=None,
         metavar='FILE',
         help='Generate HTML report at specified path',
     )
-    
+
     parser.add_argument(
         '--open',
         action='store_true',
         help='Open HTML report in browser after generation',
     )
-    
+
     parser.add_argument(
         '--fail-on-priority',
         choices=['critical', 'high', 'medium', 'low', 'any', 'none'],
@@ -289,13 +300,13 @@ def create_parser() -> argparse.ArgumentParser:
         help='Exit 1 if issues at or above this priority (default: any). '
              'Use "none" to always exit 0.',
     )
-    
+
     parser.add_argument(
         '--ci',
         action='store_true',
         help='Output in GitHub Actions format (sets GITHUB_OUTPUT)',
     )
-    
+
     parser.add_argument(
         '--baseline-sitemap',
         metavar='URL',
@@ -312,6 +323,109 @@ def create_parser() -> argparse.ArgumentParser:
         metavar='URL',
         help='Diagnostic: test URL resolution for given base URLs. '
              'Prints how relative paths resolve against each URL.',
+    )
+
+    parser.add_argument(
+        '--crawl-engine',
+        choices=['auto', 'go', 'python'],
+        default=os.environ.get('CRAWL_ENGINE', 'auto'),
+        help='Use the Go crawl-engine binary for crawling and link checking. '
+             '"auto" uses Go if available, falling back to Python. '
+             '"go" requires the binary on PATH or in crawl-engine/. '
+             '"python" uses the pure-Python pipeline (default: auto). '
+             'Env: CRAWL_ENGINE',
+    )
+
+    embeddings_group = parser.add_argument_group(
+        'semantic duplicate detection',
+        'Compute page embeddings and flag near-duplicate / off-topic content. '
+        'Phase 1 ships Ollama only (local, no API key). '
+        'Each flag falls back to an env var of the same upper-snake-case name.',
+    )
+
+    embeddings_group.add_argument(
+        '--embeddings',
+        action='store_true',
+        default=_env_bool('EMBEDDINGS_ENABLED', False),
+        help='Enable semantic duplicate / off-topic detection (default: off). '
+             'Env: EMBEDDINGS_ENABLED',
+    )
+
+    embeddings_group.add_argument(
+        '--embeddings-provider',
+        choices=['ollama', 'openai', 'gemini'],
+        default=os.environ.get('EMBEDDINGS_PROVIDER', 'ollama'),
+        help='Embedding provider backend (default: ollama). '
+             'OpenAI requires OPENAI_API_KEY; Gemini requires GEMINI_API_KEY. '
+             'Env: EMBEDDINGS_PROVIDER',
+    )
+
+    embeddings_group.add_argument(
+        '--embeddings-model',
+        default=os.environ.get('EMBEDDINGS_MODEL'),
+        help='Embedding model name. Defaults: nomic-embed-text (ollama), '
+             'text-embedding-3-small (openai), gemini-embedding-001 (gemini). '
+             'Env: EMBEDDINGS_MODEL',
+    )
+
+    embeddings_group.add_argument(
+        '--openai-api-key',
+        default=os.environ.get('OPENAI_API_KEY'),
+        help='OpenAI API key (provider=openai). Env: OPENAI_API_KEY',
+    )
+
+    embeddings_group.add_argument(
+        '--gemini-api-key',
+        default=os.environ.get('GEMINI_API_KEY'),
+        help='Gemini API key (provider=gemini). Env: GEMINI_API_KEY',
+    )
+
+    embeddings_group.add_argument(
+        '--embeddings-cache',
+        default=os.environ.get('EMBEDDINGS_CACHE', ''),
+        help='Path to the embedding cache file (content-addressed by text hash). '
+             'Defaults to <output-stem>.embeddings.json alongside the report. '
+             'Use "none" to disable caching. Env: EMBEDDINGS_CACHE',
+    )
+
+    embeddings_group.add_argument(
+        '--embeddings-history',
+        default=os.environ.get('EMBEDDINGS_HISTORY', ''),
+        help='Path to the run-history file for new-vs-persistent diffing. '
+             'Defaults to <output-stem>.embeddings.history.json alongside the report. '
+             'Use "none" to disable diffing. Env: EMBEDDINGS_HISTORY',
+    )
+
+    embeddings_group.add_argument(
+        '--similarity-threshold',
+        type=float,
+        default=float(os.environ.get('SIMILARITY_THRESHOLD', '0.95')),
+        help='Cosine similarity threshold for flagging pairs (default: 0.95, '
+             'matching Screaming Frog). Lower catches more near-duplicates. '
+             'Env: SIMILARITY_THRESHOLD',
+    )
+
+    embeddings_group.add_argument(
+        '--outlier-threshold',
+        type=float,
+        default=float(os.environ.get('OUTLIER_THRESHOLD', '2.0')),
+        help='Std-dev multiplier for off-topic outlier detection (default: 2.0). '
+             'Env: OUTLIER_THRESHOLD',
+    )
+
+    embeddings_group.add_argument(
+        '--ollama-url',
+        default=os.environ.get('OLLAMA_URL', 'http://localhost:11434'),
+        help='Ollama API base URL (default: http://localhost:11434). '
+             'Env: OLLAMA_URL',
+    )
+
+    embeddings_group.add_argument(
+        '--max-content-chars',
+        type=int,
+        default=int(os.environ.get('MAX_CONTENT_CHARS', '8000')),
+        help='Max chars of page text to embed per page (default: 8000). '
+             'Env: MAX_CONTENT_CHARS',
     )
 
     fp_group = parser.add_argument_group(
@@ -365,6 +479,32 @@ def create_parser() -> argparse.ArgumentParser:
              'FILE defaults to the --output path. Example: linkcheck --review link_report.csv',
     )
 
+    migration_group = parser.add_argument_group(
+        'migration verification',
+        'Verify a migration-report.json (open standard v1.0) against the live '
+        'destination site: every migrated URL is cross-referenced with what '
+        'actually resolves. Produced by any migration tool (e.g. Portage); '
+        'pairs with portage slug-audit for redirect generation.',
+    )
+
+    migration_group.add_argument(
+        '--verify-migration',
+        metavar='FILE',
+        default=None,
+        help='Path to a migration-report.json to verify against the live site. '
+             'Checks each migrated/redirected destination resolves 2xx, each '
+             'redirected source redirects as declared, and each quarantined/'
+             'excluded source is gone. Writes migration-verification.csv.',
+    )
+
+    migration_group.add_argument(
+        '--site',
+        metavar='URL',
+        default=None,
+        help='Destination site base URL (overrides destination_base_url from '
+             'the migration report). Useful for verifying a staging/preview build.',
+    )
+
     return parser
 
 
@@ -391,6 +531,8 @@ def print_summary(summary: dict, ci_mode: bool = False):
             f"broken={summary.get('broken', 0)}",
             f"redirect-loops={summary.get('redirect_loops', 0)}",
             f"redirect-chains={summary.get('redirect_chains', 0)}",
+            f"semantic-duplicates={summary.get('semantic_duplicates', 0)}",
+            f"off-topic={summary.get('off_topic', 0)}",
         ]
         if github_output:
             with open(github_output, 'a') as f:
@@ -398,11 +540,11 @@ def print_summary(summary: dict, ci_mode: bool = False):
         else:
             for line in output_lines:
                 print(f"::{line}")
-    
+
     print("""
 Summary
 -------""")
-    
+
     ok = summary.get('ok', 0)
     redirects = summary.get('redirects', 0)
     canonical = summary.get('canonical_redirects', 0)
@@ -410,7 +552,7 @@ Summary
     loops = summary.get('redirect_loops', 0)
     broken = summary.get('broken', 0)
     errors = summary.get('errors', 0)
-    
+
     if ok > 0:
         print(f"  OK (200):              {ok:>4} links")
     if redirects > 0:
@@ -425,16 +567,16 @@ Summary
         print(f"  Broken (4xx/5xx):      {broken:>4} links")
     if errors > 0:
         print(f"  Errors:                {errors:>4} links")
-    
+
     print("""
 Priority Breakdown
 ------------------""")
-    
+
     critical = summary.get('critical', 0)
     high = summary.get('high', 0)
     medium = summary.get('medium', 0)
     low = summary.get('low', 0)
-    
+
     if critical > 0:
         print(f"  Critical: {critical:>4} issues")
     if high > 0:
@@ -448,6 +590,13 @@ Priority Breakdown
     if preview_404 > 0:
         print(f"\nBaseline suppressed")
         print(f"  Preview-only 404: {preview_404:>4}  (page exists in baseline, excluded from this build)")
+
+    semantic_dups = summary.get('semantic_duplicates', 0)
+    off_topic = summary.get('off_topic', 0)
+    if semantic_dups > 0 or off_topic > 0:
+        print("\nSemantic findings")
+        print(f"  Near-duplicate pairs: {semantic_dups:>4}")
+        print(f"  Off-topic outliers:   {off_topic:>4}")
 
 
 def check_priority_threshold(summary: dict, fail_on: str) -> bool:
@@ -525,6 +674,138 @@ def _parse_selection(raw: str, max_index: int) -> list[int]:
     return sorted(i for i in indices if 0 <= i < max_index)
 
 
+def _build_checker(parsed_args):
+    """Construct a LinkChecker from parsed args (auth, headers, retries).
+
+    Returns ``(checker, info)`` where ``info`` carries the display values used
+    by the retry/auth status prints.
+    """
+    max_retries = 0 if parsed_args.no_retry else parsed_args.max_retries
+
+    auth_user = parsed_args.auth_user
+    auth_pass = parsed_args.auth_pass
+    if parsed_args.auth_pass_env and not auth_pass:
+        auth_pass = os.environ.get(parsed_args.auth_pass_env)
+
+    custom_headers = {}
+    for header in parsed_args.headers:
+        if ':' in header:
+            name, value = header.split(':', 1)
+            custom_headers[name.strip()] = value.strip()
+
+    cookies = {}
+    for cookie in parsed_args.cookies:
+        if '=' in cookie:
+            name, value = cookie.split('=', 1)
+            cookies[name.strip()] = value.strip()
+
+    checker = LinkChecker(
+        user_agent=parsed_args.user_agent,
+        timeout=parsed_args.timeout,
+        delay=parsed_args.delay / 2,
+        max_retries=max_retries,
+        retry_delay=parsed_args.retry_delay,
+        retry_backoff=parsed_args.retry_backoff,
+        auth_user=auth_user,
+        auth_pass=auth_pass,
+        headers=custom_headers if custom_headers else None,
+        cookies=cookies if cookies else None,
+    )
+    info = {
+        'max_retries': max_retries,
+        'auth_user': auth_user,
+        'custom_headers': custom_headers,
+        'cookies': cookies,
+    }
+    return checker, info
+
+
+def _run_migration_verification(parsed_args) -> int:
+    """Verify a migration-report.json against the live destination site.
+
+    Cross-references every record (source URL + destination path + status)
+    against what actually resolves, and writes migration-verification.csv.
+    Returns EXIT_SUCCESS if every record verified, EXIT_ISSUES_FOUND otherwise.
+    """
+    from pathlib import Path
+
+    from .migration_verifier import (
+        COLLISION, MISSING, REDIRECT_MISSING, REVIEW, UNEXPECTED_LIVE,
+        VERIFIED, MigrationReportError, MigrationVerifier,
+        load_migration_report, summarize, verification_csv,
+    )
+
+    report_path = parsed_args.verify_migration
+    if not os.path.exists(report_path):
+        print(f"Error: migration report not found: {report_path}")
+        return EXIT_CRAWL_FAILURE
+
+    try:
+        report = load_migration_report(report_path)
+    except (json.JSONDecodeError, MigrationReportError, OSError) as exc:
+        print(f"Error: invalid migration report: {exc}")
+        return EXIT_CRAWL_FAILURE
+
+    checker, _ = _build_checker(parsed_args)
+    print(f"Verifying {len(report['records'])} migrated URL(s) from {report_path}")
+    print(f"Destination: {parsed_args.site or report.get('destination_base_url', '(none)')}")
+    print()
+
+    verifier = MigrationVerifier(checker)
+    try:
+        rows = verifier.verify(report, site=parsed_args.site)
+    finally:
+        checker.close()
+
+    counts = summarize(rows)
+
+    # Per-verification detail lines
+    for row in rows:
+        if row.verification == VERIFIED:
+            continue
+        mark = {'missing': '✗', 'redirect_missing': '✗', 'unexpected_live': '⚠',
+                'collision': '⚠', 'review': '?'}.get(row.verification, '!')
+        url = row.source_url or row.destination_url
+        print(f"  {mark} [{row.verification}] {url}")
+        if row.detail:
+            print(f"      {row.detail}")
+
+    print()
+    print("Migration Verification Summary")
+    print("-------------------------------")
+    print(f"  Verified:          {counts[VERIFIED]:>4}  ({counts[VERIFIED]}/{len(rows)} records)")
+    if counts[MISSING]:
+        print(f"  Missing:           {counts[MISSING]:>4}  (destination did not resolve)")
+    if counts[REDIRECT_MISSING]:
+        print(f"  Redirect missing:  {counts[REDIRECT_MISSING]:>4}  (source did not redirect as declared)")
+    if counts[UNEXPECTED_LIVE]:
+        print(f"  Unexpectedly live: {counts[UNEXPECTED_LIVE]:>4}  (should be gone, still resolves)")
+    if counts[COLLISION]:
+        print(f"  Collisions:        {counts[COLLISION]:>4}  (two records, one destination path)")
+    if counts[REVIEW]:
+        print(f"  Needs review:      {counts[REVIEW]:>4}  (failed records)")
+
+    # Verify mode's natural artifact is migration-verification.csv; honor an
+    # explicit -o, otherwise don't overwrite the crawl report name.
+    output_path = (
+        parsed_args.output if parsed_args.output != 'link_report.csv'
+        else 'migration-verification.csv'
+    )
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write(verification_csv(rows))
+    print(f"\nVerification saved to: {output_path}")
+
+    verified = counts[VERIFIED]
+    if verified == len(rows):
+        print("\nExiting with code 0 (every migrated URL verified)")
+        return EXIT_SUCCESS
+    print(
+        f"\nExiting with code 1 ({len(rows) - verified} of {len(rows)} records "
+        f"did not verify)"
+    )
+    return EXIT_ISSUES_FOUND
+
+
 def _run_review_mode(report_path: str, fp_log_path: str) -> int:
     """Interactive false positive review for an existing report."""
     import os
@@ -538,7 +819,7 @@ def _run_review_mode(report_path: str, fp_log_path: str) -> int:
     issues = df[df['issue_type'] != 'ok'].reset_index(drop=True)
 
     if issues.empty:
-        print(f"No issues found in {report_path} — nothing to review.")
+        print(f"No issues found in {report_path} - nothing to review.")
         return EXIT_SUCCESS
 
     fp_logger = FPLogger(fp_log_path)
@@ -566,7 +847,7 @@ def _run_review_mode(report_path: str, fp_log_path: str) -> int:
 
     print('─' * width)
     print("\n  Select issues to mark as false positives.")
-    print("  Numbers, ranges, or 'all'  (e.g. 1,3,5-7)  — Enter to skip.\n")
+    print("  Numbers, ranges, or 'all'  (e.g. 1,3,5-7)  - Enter to skip.\n")
 
     try:
         raw = input("  Selection: ").strip()
@@ -627,18 +908,380 @@ def _run_review_mode(report_path: str, fp_log_path: str) -> int:
     return EXIT_SUCCESS
 
 
+def _default_embeddings_model(provider: str, explicit: str | None) -> str:
+    """Pick the default embedding model for a provider if none was given."""
+    if explicit:
+        return explicit
+    return {
+        "ollama": "nomic-embed-text",
+        "openai": "text-embedding-3-small",
+        "gemini": "gemini-embedding-001",
+    }.get(provider, "nomic-embed-text")
+
+
+def _run_embeddings_check(page_html, parsed_args, reporter, df):
+    """Run semantic duplicate / off-topic detection and append findings to df.
+
+    Returns (updated_df, has_findings). Degrades gracefully: if the embedding
+    provider is unreachable, prints a warning and returns the df unchanged.
+    Uses a content-addressed cache so unchanged pages aren't re-embedded.
+    """
+    from pathlib import Path
+
+    from .content_extractor import extract_main_text
+    from .embedding_cache import EmbeddingCache, content_hash
+    from .embedding_history import (
+        EmbeddingHistory,
+        count_resolved_outliers,
+        count_resolved_pairs,
+        diff_outliers,
+        diff_pairs,
+    )
+    from .embeddings import EmbeddingError, get_provider
+    from .similarity import find_outliers, find_similar_pairs
+
+    import numpy as np
+
+    if not page_html:
+        print("\nEmbeddings: no page HTML captured (nothing to embed)")
+        return df, False
+
+    model = _default_embeddings_model(
+        parsed_args.embeddings_provider, parsed_args.embeddings_model
+    )
+
+    print(f"\nEmbeddings: extracting main content for {len(page_html)} page(s)")
+    urls: list[str] = []
+    texts: list[str] = []
+    for url, html in page_html.items():
+        text = extract_main_text(html, max_chars=parsed_args.max_content_chars)
+        if text:
+            urls.append(url)
+            texts.append(text)
+
+    if not texts:
+        print("Embeddings: no extractable page text (skipping)")
+        return df, False
+
+    # Resolve the cache path. "none" disables caching; empty falls back to
+    # <output-stem>.embeddings.json alongside the report.
+    cache_path = parsed_args.embeddings_cache
+    if cache_path and cache_path.lower() == "none":
+        cache = None
+    else:
+        if not cache_path:
+            from pathlib import Path as _P
+            out = _P(parsed_args.output)
+            cache_path = str(out.parent / (out.stem + ".embeddings.json"))
+        cache = EmbeddingCache(cache_path, model=model, provider=parsed_args.embeddings_provider)
+        cache.load()
+        print(f"Embeddings: cache loaded ({cache.size} entries) from {cache_path}")
+
+    # Split texts into cache hits and misses to minimize provider calls.
+    hashes: list[str] = []
+    vectors: list[list[float] | None] = [None] * len(texts)
+    miss_indices: list[int] = []
+    if cache is not None:
+        for i, text in enumerate(texts):
+            h = content_hash(text)
+            hashes.append(h)
+            cached_vec = cache.get(h)
+            if cached_vec is not None:
+                vectors[i] = cached_vec
+            else:
+                miss_indices.append(i)
+        hits = len(texts) - len(miss_indices)
+        print(f"Embeddings: {hits} cache hit(s), {len(miss_indices)} miss(es)")
+    else:
+        miss_indices = list(range(len(texts)))
+        hashes = [content_hash(t) for t in texts]
+
+    provider = None
+    try:
+        if miss_indices:
+            miss_texts = [texts[i] for i in miss_indices]
+            print(
+                f"Embeddings: embedding {len(miss_texts)} page(s) via "
+                f"{parsed_args.embeddings_provider}/{model}"
+            )
+            provider = get_provider(
+                parsed_args.embeddings_provider,
+                ollama_url=parsed_args.ollama_url,
+                model=model,
+                user_agent=parsed_args.user_agent,
+                openai_api_key=parsed_args.openai_api_key,
+                gemini_api_key=parsed_args.gemini_api_key,
+            )
+            new_vectors = provider.embed(miss_texts)
+            if len(new_vectors) != len(miss_texts):
+                print(
+                    f"Embeddings: vector count mismatch "
+                    f"({len(new_vectors)} vs {len(miss_texts)} requested), "
+                    "skipping semantic checks"
+                )
+                return df, False
+            for idx, vec in zip(miss_indices, new_vectors):
+                vectors[idx] = vec
+            if cache is not None:
+                for idx, vec in zip(miss_indices, new_vectors):
+                    cache.put(hashes[idx], urls[idx], vec)
+    except EmbeddingError as exc:
+        print(f"Embeddings: provider error, skipping semantic checks - {exc}")
+        return df, False
+    finally:
+        if provider is not None:
+            provider.close()
+        if cache is not None:
+            cache.save()
+
+    if any(v is None for v in vectors):
+        print("Embeddings: missing vectors after embed, skipping semantic checks")
+        return df, False
+
+    matrix = np.array(vectors, dtype=float)
+
+    pairs = find_similar_pairs(
+        matrix, urls, threshold=parsed_args.similarity_threshold
+    )
+    outliers = find_outliers(
+        matrix, urls, n_std=parsed_args.outlier_threshold
+    )
+
+    # --- Phase 3: new-vs-persistent diffing via run history ---
+    history_path = parsed_args.embeddings_history
+    history = None
+    if history_path and history_path.lower() != "none":
+        if not history_path:
+            from pathlib import Path as _P2
+            out = _P2(parsed_args.output)
+            history_path = str(out.parent / (out.stem + ".embeddings.history.json"))
+        history = EmbeddingHistory(
+            history_path, model=model, provider=parsed_args.embeddings_provider
+        )
+        history.load()
+        prior_pairs, prior_outliers = history.prior_findings()
+        if history.run_count > 0:
+            print(
+                f"Embeddings: diffing against prior run "
+                f"({history.run_count} run(s) on file)"
+            )
+        diff_pairs(pairs, prior_pairs)
+        diff_outliers(outliers, prior_outliers)
+        resolved_pairs = count_resolved_pairs(pairs, prior_pairs)
+        resolved_outliers = count_resolved_outliers(outliers, prior_outliers)
+        if resolved_pairs or resolved_outliers:
+            print(
+                f"Embeddings: {resolved_pairs} resolved pair(s), "
+                f"{resolved_outliers} resolved outlier(s) since last run"
+            )
+        # Record this run for next time.
+        history.record_run(pairs, outliers)
+    else:
+        if history_path and history_path.lower() == "none":
+            print("Embeddings: history diffing disabled (--embeddings-history none)")
+
+    new_pairs = sum(1 for p in pairs if p.status == "new")
+    new_outliers = sum(1 for o in outliers if o.status == "new")
+    persistent_pairs = sum(1 for p in pairs if p.status == "persistent")
+    persistent_outliers = sum(1 for o in outliers if o.status == "persistent")
+    if history is not None and (pairs or outliers):
+        print(
+            f"Embeddings: {len(pairs)} similar pair(s) "
+            f"({new_pairs} new, {persistent_pairs} persistent), "
+            f"{len(outliers)} off-topic outlier(s) "
+            f"({new_outliers} new, {persistent_outliers} persistent)"
+        )
+    else:
+        print(f"Embeddings: {len(pairs)} similar pair(s), {len(outliers)} off-topic outlier(s)")
+
+    if not pairs and not outliers:
+        if history is not None:
+            history.save()
+        return df, False
+
+    similarity_df = reporter.generate_similarity_report(pairs, outliers)
+    if not similarity_df.empty:
+        df = pd.concat([df, similarity_df], ignore_index=True)
+
+    if history is not None:
+        history.save()
+
+    return df, True
+
+
+def _run_with_go_engine(parsed_args):
+    """Run the crawl-and-check pipeline via the Go binary, then feed
+    results into the existing Python reporter/exporter/embeddings layer.
+
+    Returns an exit code (0, 1, 2, or 3).
+    """
+    from .crawl_engine import run_crawl_engine
+    from pathlib import Path
+
+    print("Using Go crawl-engine")
+    collect_html = parsed_args.embeddings
+
+    try:
+        result = run_crawl_engine(parsed_args, collect_html=collect_html)
+    except FileNotFoundError as exc:
+        print(f"Error: {exc}")
+        return EXIT_CRAWL_FAILURE
+    except RuntimeError as exc:
+        print(f"Error: {exc}")
+        return EXIT_CRAWL_FAILURE
+
+    # Report robots.txt stats
+    robots_stats = result.robots_stats
+    if robots_stats.get('urls_skipped', 0) > 0:
+        print(f"\nRobots.txt compliance:")
+        print(f"  URLs skipped: {robots_stats['urls_skipped']}")
+        if robots_stats.get('ignored'):
+            print(f"  (ignored due to --ignore-robots)")
+
+    # Report retry stats
+    retry_stats = result.retry_stats
+    if retry_stats.get('urls_with_retries', 0) > 0:
+        print(f"\nRetry statistics:")
+        print(f"  URLs that required retries: {retry_stats['urls_with_retries']}")
+        print(f"  Total retry attempts: {retry_stats['total_retries']}")
+
+    all_links = result.links
+    link_statuses = result.link_statuses
+    page_html = result.page_html
+
+    # Determine sitemap mode
+    sitemap_mode = result.metadata.get('sitemap_mode', False)
+    sitemap_urls = result.sitemap_urls if sitemap_mode else []
+
+    unique_urls = list(set(link.link_url for link in all_links))
+    print(f"Extracted {len(all_links)} links ({len(unique_urls)} unique)")
+
+    # Apply internal/external filtering (Go already handles this, but
+    # double-check for consistency)
+    if parsed_args.internal_only:
+        all_links = [link for link in all_links if link.is_internal]
+    elif parsed_args.external_only:
+        all_links = [link for link in all_links if not link.is_internal]
+
+    # Set up false positive logger
+    fp_logger = None
+    if not parsed_args.no_fp_log:
+        from .fp_logger import FPLogger
+        fp_log_path = parsed_args.fp_log or (
+            str(Path(parsed_args.output).parent /
+                (Path(parsed_args.output).stem + '.fp.jsonl'))
+        )
+        fp_logger = FPLogger(fp_log_path)
+        print(f"FP log: {fp_log_path}")
+
+    # Baseline URLs for preview_404
+    baseline_urls: set = set()
+    if result.baseline_urls:
+        from .utils import normalize_url as _norm
+        baseline_urls = {_norm(u) for u in result.baseline_urls}
+        print(f"Baseline: {len(baseline_urls)} URLs loaded")
+
+    # Generate report
+    from .reporter import ReportGenerator
+    reporter = ReportGenerator(
+        expand_duplicates=parsed_args.expand_duplicates,
+        skip_ok=parsed_args.skip_ok,
+        fp_logger=fp_logger,
+        baseline_urls=baseline_urls or None,
+    )
+
+    df = reporter.generate_report(all_links, link_statuses)
+
+    # Orphaned page detection
+    if sitemap_mode and not parsed_args.no_orphan_check:
+        orphan_df = reporter.generate_orphan_report(sitemap_urls, all_links)
+        orphan_count = len(orphan_df)
+        print(f"Found {orphan_count} orphaned page(s) (no internal links)")
+        if orphan_count > 0:
+            df = pd.concat([df, orphan_df], ignore_index=True)
+
+    # Semantic duplicate / off-topic detection
+    semantic_findings = False
+    if parsed_args.embeddings:
+        df, semantic_findings = _run_embeddings_check(
+            page_html=page_html,
+            parsed_args=parsed_args,
+            reporter=reporter,
+            df=df,
+        )
+
+    summary = reporter.get_summary(df)
+
+    # Export report
+    from .exporters import ReportExporter, detect_format
+    export_format = parsed_args.format or detect_format(parsed_args.output)
+    exporter = ReportExporter(df, summary)
+
+    try:
+        if parsed_args.google_sheets:
+            import os as _os
+            creds_path = _os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
+            sheets_url = exporter.export_google_sheets(credentials_path=creds_path)
+            print(f"\nGoogle Sheets URL: {sheets_url}")
+        else:
+            exporter.export(parsed_args.output, format=export_format)
+            print(f"\nReport saved to: {parsed_args.output} ({export_format})")
+    except ImportError as e:
+        print(f"Warning: {e}")
+        print("Falling back to CSV format...")
+        exporter.export_csv(parsed_args.output)
+        print(f"\nReport saved to: {parsed_args.output} (csv)")
+
+    print_summary(summary, ci_mode=parsed_args.ci)
+
+    if parsed_args.html_report:
+        from .html_reporter import HTMLReportGenerator
+        html_reporter = HTMLReportGenerator()
+        html_reporter.load_csv(parsed_args.output)
+        html_reporter.generate_html(parsed_args.html_report, open_browser=parsed_args.open)
+        print(f"HTML report saved to: {parsed_args.html_report}")
+
+    # Exit code logic
+    should_fail = check_priority_threshold(summary, parsed_args.fail_on_priority)
+
+    if should_fail:
+        print(f"\nExiting with code 1 (issues found at {parsed_args.fail_on_priority}+ priority)")
+        if parsed_args.ci:
+            github_output = os.environ.get('GITHUB_OUTPUT')
+            if github_output:
+                with open(github_output, 'a') as f:
+                    f.write('exit-code=1\n')
+        return EXIT_ISSUES_FOUND
+    elif semantic_findings:
+        print("\nExiting with code 3 (semantic duplicate / off-topic findings)")
+        if parsed_args.ci:
+            github_output = os.environ.get('GITHUB_OUTPUT')
+            if github_output:
+                with open(github_output, 'a') as f:
+                    f.write('exit-code=3\n')
+        return EXIT_SEMANTIC_ISSUES
+    else:
+        print(f"\nExiting with code 0 (no issues at {parsed_args.fail_on_priority}+ priority)")
+        if parsed_args.ci:
+            github_output = os.environ.get('GITHUB_OUTPUT')
+            if github_output:
+                with open(github_output, 'a') as f:
+                    f.write('exit-code=0\n')
+        return EXIT_SUCCESS
+
+
 def main(args=None):
     """Main entry point."""
     parser = create_parser()
     parsed_args = parser.parse_args(args)
-    
+
     setup_logging(parsed_args.verbose)
     print_banner()
-    
+
     # Handle --test-urls diagnostic mode
     if parsed_args.test_urls:
         from .utils import resolve_relative_url, normalize_url
-        
+
         test_hrefs = [
             '/blog/post-name/',
             'relative-page/',
@@ -647,7 +1290,7 @@ def main(args=None):
             '//cdn.example.com/asset.js',
             'https://external.com/page',
         ]
-        
+
         for base_url in parsed_args.test_urls:
             print(f"\nURL Resolution Test: {base_url}")
             print(f"{'=' * 60}")
@@ -657,11 +1300,11 @@ def main(args=None):
                 resolved = resolve_relative_url(base_url, href)
                 normalized = normalize_url(resolved) if resolved else '(empty)'
                 print(f"{href:<35} {normalized}")
-        
+
         print(f"\n{'=' * 60}")
         print("All URLs resolved correctly. No subdirectory stripping detected.")
         return EXIT_SUCCESS
-    
+
     # --review mode: interactive false positive review of an existing report.
     if parsed_args.review:
         from pathlib import Path
@@ -699,9 +1342,33 @@ def main(args=None):
     if parsed_args.internal_only and parsed_args.external_only:
         print("Error: Cannot use both --internal-only and --external-only")
         return EXIT_CRAWL_FAILURE
-    
+
+    # --verify-migration mode: cross-reference a migration report against the
+    # live destination site. Runs before any crawling — it checks the exact
+    # expectation set from the report.
+    if parsed_args.verify_migration:
+        return _run_migration_verification(parsed_args)
+
+    # --- Go crawl-engine branch ---
+    # If --crawl-engine is "go" or "auto" (and binary is available), use the
+    # Go binary for the crawl-and-check pipeline, then feed results into the
+    # existing Python reporter/exporter/embeddings layer.
+    use_go_engine = False
+    if parsed_args.crawl_engine in ('go', 'auto'):
+        from .crawl_engine import is_available as go_engine_available
+        if go_engine_available():
+            use_go_engine = True
+        elif parsed_args.crawl_engine == 'go':
+            print("Error: --crawl-engine go but Go binary not found.")
+            print("Build it with: cd crawl-engine && go build -o crawl-engine .")
+            return EXIT_CRAWL_FAILURE
+
+    if use_go_engine:
+        return _run_with_go_engine(parsed_args)
+        return EXIT_CRAWL_FAILURE
+
     # Determine input mode
-    sitemap_mode = False  # Orphaned page detection — sitemap mode only
+    sitemap_mode = False  # Orphaned page detection - sitemap mode only
     sitemap_urls: list[str] = []  # full sitemap URL list (before max_pages slice)
 
     if parsed_args.url:
@@ -755,19 +1422,19 @@ def main(args=None):
         base_url = parsed_args.sitemap_url
         sitemap_mode = True
         sitemap_urls = list(page_urls)  # capture before max_pages truncation
-    
+
     if parsed_args.max_pages:
         page_urls = page_urls[:parsed_args.max_pages]
-    
+
     print(f"Found {len(page_urls)} pages to crawl")
-    
+
     # Initialize robots.txt compliance checker
     robots_checker = RobotsComplianceChecker(
         user_agent=parsed_args.user_agent,
         timeout=parsed_args.timeout,
         ignore_robots=parsed_args.ignore_robots,
     )
-    
+
     # Check robots.txt for crawl delay and apply
     crawl_delay = robots_checker.get_crawl_delay(base_url)
     if crawl_delay and crawl_delay > parsed_args.delay:
@@ -775,7 +1442,7 @@ def main(args=None):
         effective_delay = crawl_delay
     else:
         effective_delay = parsed_args.delay
-    
+
     crawler = PageCrawler(
         base_url=base_url,
         user_agent=parsed_args.user_agent,
@@ -783,9 +1450,10 @@ def main(args=None):
         delay=effective_delay,
         include_subdomains=parsed_args.include_subdomains,
     )
-    
+
     all_links = []
-    
+    page_html: dict[str, str] = {}  # url -> raw HTML, populated when --embeddings
+
     try:
         with tqdm(total=len(page_urls), desc="Crawling pages", unit="page") as pbar:
             for url in page_urls:
@@ -794,13 +1462,19 @@ def main(args=None):
                 if not is_allowed:
                     pbar.update(1)
                     continue
-                
-                links = crawler.crawl_page(url)
-                all_links.extend(links)
+
+                if parsed_args.embeddings:
+                    links, html = crawler.crawl_page_with_html(url)
+                    all_links.extend(links)
+                    if html:
+                        page_html[url] = html
+                else:
+                    links = crawler.crawl_page(url)
+                    all_links.extend(links)
                 pbar.update(1)
     finally:
         crawler.close()
-    
+
     # Report robots.txt stats
     robots_stats = robots_checker.get_stats()
     if robots_stats['urls_skipped'] > 0:
@@ -808,20 +1482,20 @@ def main(args=None):
         print(f"  URLs skipped: {robots_stats['urls_skipped']}")
         if parsed_args.ignore_robots:
             print(f"  (ignored due to --ignore-robots)")
-    
+
     if parsed_args.internal_only:
         all_links = [link for link in all_links if link.is_internal]
     elif parsed_args.external_only:
         all_links = [link for link in all_links if not link.is_internal]
-    
+
     unique_urls = list(set(link.link_url for link in all_links))
     print(f"Extracted {len(all_links)} links ({len(unique_urls)} unique)")
-    
+
     # Apply URL pattern filtering
     pattern_matcher = create_matcher_from_args(parsed_args)
     if pattern_matcher.include_patterns or pattern_matcher.exclude_patterns:
         included_urls, excluded_urls = pattern_matcher.filter_urls(unique_urls)
-        
+
         print(f"\nPattern filtering ({parsed_args.pattern_type}):")
         if pattern_matcher.exclude_patterns:
             print(f"  Exclude patterns: {pattern_matcher.exclude_patterns}")
@@ -829,13 +1503,13 @@ def main(args=None):
         if pattern_matcher.include_patterns:
             print(f"  Include patterns: {pattern_matcher.include_patterns}")
         print(f"  URLs to check: {len(included_urls)}")
-        
+
         unique_urls = included_urls
-        
+
         if not unique_urls:
             print("No URLs match the patterns")
             return EXIT_SUCCESS
-    
+
     # Apply robots.txt filtering for links to check
     # (We already filtered pages to crawl, this filters the destination URLs)
     if not parsed_args.ignore_robots:
@@ -845,65 +1519,28 @@ def main(args=None):
             print(f"  Links skipped: {len(skipped_urls)}")
             print(f"  Links to check: {len(allowed_urls)}")
             unique_urls = allowed_urls
-    
+
     if not unique_urls:
         print("No links to check")
         return EXIT_SUCCESS
-    
-    # Determine retry settings
-    max_retries = 0 if parsed_args.no_retry else parsed_args.max_retries
-    
-    # Parse authentication settings
-    auth_user = parsed_args.auth_user
-    auth_pass = parsed_args.auth_pass
-    
-    # Get password from env var if specified
-    if parsed_args.auth_pass_env and not auth_pass:
-        import os
-        auth_pass = os.environ.get(parsed_args.auth_pass_env)
-    
-    # Parse custom headers
-    custom_headers = {}
-    for header in parsed_args.headers:
-        if ':' in header:
-            name, value = header.split(':', 1)
-            custom_headers[name.strip()] = value.strip()
-    
-    # Parse cookies
-    cookies_dict = {}
-    for cookie in parsed_args.cookies:
-        if '=' in cookie:
-            name, value = cookie.split('=', 1)
-            cookies_dict[name.strip()] = value.strip()
-    
-    checker = LinkChecker(
-        user_agent=parsed_args.user_agent,
-        timeout=parsed_args.timeout,
-        delay=parsed_args.delay / 2,
-        max_retries=max_retries,
-        retry_delay=parsed_args.retry_delay,
-        retry_backoff=parsed_args.retry_backoff,
-        auth_user=auth_user,
-        auth_pass=auth_pass,
-        headers=custom_headers if custom_headers else None,
-        cookies=cookies_dict if cookies_dict else None,
-    )
-    
-    print(f"Retry settings: max={max_retries}, delay={parsed_args.retry_delay}s, backoff={parsed_args.retry_backoff}x")
-    
+
+    checker, check_info = _build_checker(parsed_args)
+
+    print(f"Retry settings: max={check_info['max_retries']}, delay={parsed_args.retry_delay}s, backoff={parsed_args.retry_backoff}x")
+
     # Report auth status (without revealing secrets)
-    if auth_user:
-        print(f"Authentication: Basic auth enabled for user '{auth_user}'")
-    if custom_headers:
-        header_names = list(custom_headers.keys())
+    if check_info['auth_user']:
+        print(f"Authentication: Basic auth enabled for user '{check_info['auth_user']}'")
+    if check_info['custom_headers']:
+        header_names = list(check_info['custom_headers'].keys())
         if 'Authorization' in header_names:
             header_names[header_names.index('Authorization')] = 'Authorization: ***'
         print(f"Custom headers: {', '.join(header_names)}")
-    if cookies_dict:
-        print(f"Cookies: {len(cookies_dict)} cookie(s) set")
-    
+    if check_info['cookies']:
+        print(f"Cookies: {len(check_info['cookies'])} cookie(s) set")
+
     link_statuses = {}
-    
+
     try:
         with tqdm(total=len(unique_urls), desc="Checking links", unit="link") as pbar:
             for url in unique_urls:
@@ -912,14 +1549,14 @@ def main(args=None):
                 pbar.update(1)
     finally:
         checker.close()
-    
+
     # Report retry statistics
     cache_stats = checker.get_cache_stats()
     if cache_stats['urls_with_retries'] > 0:
         print(f"\nRetry statistics:")
         print(f"  URLs that required retries: {cache_stats['urls_with_retries']}")
         print(f"  Total retry attempts: {cache_stats['total_retries']}")
-    
+
     # Fetch baseline sitemap for preview-404 reclassification.
     baseline_urls: set = set()
     if parsed_args.baseline_sitemap:
@@ -958,7 +1595,7 @@ def main(args=None):
 
     df = reporter.generate_report(all_links, link_statuses)
 
-    # Orphaned page detection — sitemap mode only
+    # Orphaned page detection - sitemap mode only
     if sitemap_mode and not parsed_args.no_orphan_check:
         orphan_df = reporter.generate_orphan_report(sitemap_urls, all_links)
         orphan_count = len(orphan_df)
@@ -966,14 +1603,24 @@ def main(args=None):
         if orphan_count > 0:
             df = pd.concat([df, orphan_df], ignore_index=True)
 
+    # Semantic duplicate / off-topic outlier detection (--embeddings)
+    semantic_findings = False
+    if parsed_args.embeddings:
+        df, semantic_findings = _run_embeddings_check(
+            page_html=page_html,
+            parsed_args=parsed_args,
+            reporter=reporter,
+            df=df,
+        )
+
     summary = reporter.get_summary(df)
-    
+
     # Determine export format
     export_format = parsed_args.format or detect_format(parsed_args.output)
-    
+
     # Create exporter and save report
     exporter = ReportExporter(df, summary)
-    
+
     try:
         if parsed_args.google_sheets:
             import os
@@ -988,31 +1635,37 @@ def main(args=None):
         print("Falling back to CSV format...")
         exporter.export_csv(parsed_args.output)
         print(f"\nReport saved to: {parsed_args.output} (csv)")
-    
+
     print_summary(summary, ci_mode=parsed_args.ci)
-    
+
     if parsed_args.html_report:
         html_reporter = HTMLReportGenerator()
         html_reporter.load_csv(parsed_args.output)
         html_reporter.generate_html(parsed_args.html_report, open_browser=parsed_args.open)
         print(f"HTML report saved to: {parsed_args.html_report}")
-    
+
     # Check against priority threshold
     should_fail = check_priority_threshold(summary, parsed_args.fail_on_priority)
-    
+
     if should_fail:
         print(f"\nExiting with code 1 (issues found at {parsed_args.fail_on_priority}+ priority)")
         if parsed_args.ci:
-            import os
             github_output = os.environ.get('GITHUB_OUTPUT')
             if github_output:
                 with open(github_output, 'a') as f:
                     f.write('exit-code=1\n')
         return EXIT_ISSUES_FOUND
+    elif semantic_findings:
+        print("\nExiting with code 3 (semantic duplicate / off-topic findings)")
+        if parsed_args.ci:
+            github_output = os.environ.get('GITHUB_OUTPUT')
+            if github_output:
+                with open(github_output, 'a') as f:
+                    f.write('exit-code=3\n')
+        return EXIT_SEMANTIC_ISSUES
     else:
         print(f"\nExiting with code 0 (no issues at {parsed_args.fail_on_priority}+ priority)")
         if parsed_args.ci:
-            import os
             github_output = os.environ.get('GITHUB_OUTPUT')
             if github_output:
                 with open(github_output, 'a') as f:

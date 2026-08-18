@@ -92,6 +92,10 @@ inputs:
     description: 'Optional webhook URL for notifications (Slack/Discord/Generic)'
     required: false
     default: ''
+  crawl-engine:
+    description: 'Which crawl engine to use (auto/go/python). "auto" uses Go binary if available, falls back to Python.'
+    required: false
+    default: 'auto'
 
 outputs:
   total-issues:

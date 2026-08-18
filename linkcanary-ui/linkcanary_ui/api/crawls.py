@@ -9,6 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..deps.auth import RequestContext, get_current_user
+from ..deps.usage import check_crawl_allowed, increment_usage
 from ..models import Crawl, CrawlStatus, get_db
 from ..models.schemas import (
     CrawlCreate,
@@ -48,11 +50,14 @@ def normalize_sitemap_url(url: str) -> str:
 async def create_crawl(
     request: CrawlCreate,
     db: AsyncSession = Depends(get_db),
+    ctx: RequestContext = Depends(get_current_user),
 ):
-    """Start a new crawl."""
+    """Start a new crawl. Enforces plan limits before proceeding."""
+    await check_crawl_allowed(ctx.org, request.settings.max_pages, db)
+
     sitemap_url = normalize_sitemap_url(request.sitemap_url)
     name = request.name or extract_domain(sitemap_url)
-    
+
     crawl = Crawl(
         name=name,
         sitemap_url=sitemap_url,
@@ -68,13 +73,14 @@ async def create_crawl(
         since_date=request.settings.since,
         user_agent=request.settings.user_agent,
     )
-    
+
     db.add(crawl)
     await db.commit()
     await db.refresh(crawl)
-    
+
+    await increment_usage(ctx.org_id, "crawls", 1, db)
     run_crawl_in_background(crawl.id)
-    
+
     return CrawlResponse(**crawl.to_dict())
 
 
@@ -167,14 +173,17 @@ async def stop_crawl(
 async def rerun_crawl(
     crawl_id: str,
     db: AsyncSession = Depends(get_db),
+    ctx: RequestContext = Depends(get_current_user),
 ):
-    """Re-run a crawl with the same settings."""
+    """Re-run a crawl with the same settings. Enforces plan limits."""
     result = await db.execute(select(Crawl).where(Crawl.id == crawl_id))
     original = result.scalar_one_or_none()
-    
+
     if not original:
         raise HTTPException(status_code=404, detail="Crawl not found")
-    
+
+    await check_crawl_allowed(ctx.org, original.max_pages, db)
+
     crawl = Crawl(
         name=f"{original.name} (re-run)",
         sitemap_url=original.sitemap_url,
@@ -190,13 +199,14 @@ async def rerun_crawl(
         since_date=original.since_date,
         user_agent=original.user_agent,
     )
-    
+
     db.add(crawl)
     await db.commit()
     await db.refresh(crawl)
-    
+
+    await increment_usage(ctx.org_id, "crawls", 1, db)
     run_crawl_in_background(crawl.id)
-    
+
     return CrawlResponse(**crawl.to_dict())
 
 

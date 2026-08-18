@@ -57,6 +57,9 @@ class HTMLReportGenerator:
                 'canonical_redirect': 0,
                 'ok': 0,
                 'error': 0,
+                'semantic_duplicate': 0,
+                'off_topic': 0,
+                'orphaned_page': 0,
             },
         }
         
@@ -151,6 +154,14 @@ class HTMLReportGenerator:
             <span class="badge badge-canonical">Canonical</span>
             <span class="count" id="canonical-count">{self.summary['by_issue_type']['canonical_redirect']}</span>
         </div>
+        <div class="issue-type-item">
+            <span class="badge badge-chain">Semantic Dup</span>
+            <span class="count" id="semantic-count">{self.summary['by_issue_type']['semantic_duplicate']}</span>
+        </div>
+        <div class="issue-type-item">
+            <span class="badge badge-redirect">Off-Topic</span>
+            <span class="count" id="offtopic-count">{self.summary['by_issue_type']['off_topic']}</span>
+        </div>
     </div>
     
     <div class="filters-bar">
@@ -165,6 +176,9 @@ class HTMLReportGenerator:
                 <option value="redirect_chain">Redirect Chain</option>
                 <option value="redirect">Redirect</option>
                 <option value="canonical_redirect">Canonical</option>
+                <option value="semantic_duplicate">Semantic Duplicate</option>
+                <option value="off_topic">Off-Topic</option>
+                <option value="orphaned_page">Orphaned Page</option>
                 <option value="ok">OK</option>
             </select>
         </div>
@@ -865,6 +879,9 @@ function createIssueCard(item) {
         'canonical_redirect': 'badge-canonical',
         'ok': 'badge-ok',
         'error': 'badge-broken',
+        'semantic_duplicate': 'badge-chain',
+        'off_topic': 'badge-redirect',
+        'orphaned_page': 'badge-redirect',
     }[item.issue_type] || 'badge-redirect';
     
     const issueTypeLabel = {
@@ -875,6 +892,9 @@ function createIssueCard(item) {
         'canonical_redirect': 'Canonical',
         'ok': 'OK',
         'error': 'Error',
+        'semantic_duplicate': 'Semantic Duplicate',
+        'off_topic': 'Off-Topic',
+        'orphaned_page': 'Orphaned Page',
     }[item.issue_type] || item.issue_type;
     
     const occurrenceCount = parseInt(item.occurrence_count) || 1;
@@ -920,27 +940,55 @@ function createIssueCard(item) {
     
     let finalUrlHtml = '';
     if (item.final_url && !item.redirect_chain) {
+        const finalLabel = item.issue_type === 'semantic_duplicate' ? 'Paired Page' : 'Final Destination';
         finalUrlHtml = `
             <div class="issue-field">
-                <div class="issue-field-label">Final Destination</div>
+                <div class="issue-field-label">${finalLabel}</div>
                 <div class="issue-field-value">
                     <a href="${escapeHtml(item.final_url)}" target="_blank" class="url-link">${escapeHtml(truncateUrl(item.final_url))}</a>
                 </div>
             </div>`;
     }
+
+    let similarityHtml = '';
+    if (item.similarity_score && (item.issue_type === 'semantic_duplicate' || item.issue_type === 'off_topic')) {
+        const scoreLabel = item.issue_type === 'semantic_duplicate' ? 'Similarity Score' : 'Distance from Centroid';
+        const scoreNum = parseFloat(item.similarity_score).toFixed(3);
+        similarityHtml = `
+            <div class="issue-field">
+                <div class="issue-field-label">${scoreLabel}</div>
+                <div class="issue-field-value">${scoreNum}</div>
+            </div>`;
+    }
+
+    let pairStatusBadge = '';
+    if (item.pair_status && (item.issue_type === 'semantic_duplicate' || item.issue_type === 'off_topic')) {
+        const statusLabel = item.pair_status.charAt(0).toUpperCase() + item.pair_status.slice(1);
+        const statusClass = item.pair_status === 'new' ? 'badge-broken'
+            : item.pair_status === 'persistent' ? 'badge-chain'
+            : 'badge-ok';
+        pairStatusBadge = `<span class="badge ${statusClass}">${statusLabel}</span>`;
+    }
     
+    const linkFieldLabel = {
+        'semantic_duplicate': 'Page A',
+        'off_topic': 'Page',
+        'orphaned_page': 'Orphaned Page',
+    }[item.issue_type] || 'Broken Link';
+
     return `
         <div class="issue-card priority-${item.priority}">
             <div class="issue-card-header">
                 <span class="badge ${issueTypeBadgeClass}">${issueTypeLabel}</span>
                 <span class="badge badge-priority-${item.priority}">${item.priority}</span>
+                ${pairStatusBadge}
                 ${occurrenceCount > 1 ? `<span class="occurrence-badge">${occurrenceCount}x</span>` : ''}
                 <span class="badge badge-${item.link_type}">${item.link_type}</span>
-                <span class="badge" style="background:#E5E7EB;color:var(--text)">${item.status_code}</span>
+                ${item.status_code ? `<span class="badge" style="background:#E5E7EB;color:var(--text)">${item.status_code}</span>` : ''}
             </div>
             <div class="issue-card-body">
                 <div class="issue-field">
-                    <div class="issue-field-label">Broken Link${item.link_text ? ` ("${escapeHtml(truncate(item.link_text, 50))}")` : ''}</div>
+                    <div class="issue-field-label">${linkFieldLabel}${item.link_text ? ` ("${escapeHtml(truncate(item.link_text, 50))}")` : ''}</div>
                     <div class="issue-field-value">
                         <a href="${escapeHtml(item.link_url)}" target="_blank" class="url-link">${escapeHtml(item.link_url)}</a>
                     </div>
@@ -948,6 +996,7 @@ function createIssueCard(item) {
                 ${pagesHtml}
                 ${redirectChainHtml}
                 ${finalUrlHtml}
+                ${similarityHtml}
                 ${item.recommended_fix ? `
                 <div class="issue-field">
                     <div class="issue-field-label">Recommended Fix</div>

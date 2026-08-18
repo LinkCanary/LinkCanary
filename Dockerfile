@@ -1,3 +1,11 @@
+# Stage 1: Build the Go crawl-engine binary
+FROM golang:1.23-alpine AS go-builder
+
+WORKDIR /build
+COPY crawl-engine/ .
+RUN CGO_ENABLED=0 go build -o crawl-engine -ldflags="-s -w" .
+
+# Stage 2: Python runtime with Go binary
 FROM python:3.11-slim
 
 LABEL maintainer="LinkCanary"
@@ -22,6 +30,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY . /linkcanary
 WORKDIR /linkcanary
 RUN pip install --no-cache-dir -e ".[export]"
+
+# Copy the Go crawl-engine binary from the builder stage
+COPY --from=go-builder /build/crawl-engine /usr/local/bin/linkcanary-crawl-engine
+RUN chmod +x /usr/local/bin/linkcanary-crawl-engine
 
 # Copy entrypoint script
 COPY .github/entrypoint.sh /entrypoint.sh
