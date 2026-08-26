@@ -21,6 +21,7 @@ from link_checker.content_health import (
 from link_checker.crawler import PageCrawler
 from link_checker.html_reporter import HTMLReportGenerator
 from link_checker.reporter import ReportGenerator
+from link_checker.schema_validation import validate_page_schema
 from link_checker.sitemap import SitemapParser
 
 from ..config import settings
@@ -157,6 +158,7 @@ def _run_crawl_sync(crawl_id: str):
         
         all_links = []
         page_metadatas = []
+        schema_rows = []
         
         try:
             for i, url in enumerate(page_urls):
@@ -172,6 +174,7 @@ def _run_crawl_sync(crawl_id: str):
                 meta = extract_page_metadata(url, html)
                 if meta is not None:
                     page_metadatas.append(meta)
+                schema_rows.extend(validate_page_schema(url, html))
                 
                 crawl.pages_crawled = i + 1
                 session.commit()
@@ -245,13 +248,14 @@ def _run_crawl_sync(crawl_id: str):
             import pandas as pd
             df = pd.concat([df, orphan_df], ignore_index=True)
 
-        # Content-health signals (title/meta/H1/alt/thin content + click depth)
+        # Content-health signals (title/meta/H1/alt/thin + click depth + schema)
         content_findings = []
         if page_metadatas:
             content_findings.extend(generate_content_findings(page_metadatas))
         if not crawl.external_only:
             depths = compute_click_depths(page_urls, all_links)
             content_findings.extend(generate_click_depth_findings(depths))
+        content_findings.extend(schema_rows)
         if content_findings:
             import pandas as pd
             content_df = pd.DataFrame([vars(r) for r in content_findings])
