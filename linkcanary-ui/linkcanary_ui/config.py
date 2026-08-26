@@ -50,6 +50,16 @@ class Settings(BaseSettings):
     stripe_secret_key: Optional[str] = None
     stripe_webhook_secret: Optional[str] = None
 
+    # Stripe Payment Link URLs (hosted by Stripe, no backend needed)
+    stripe_link_songbird_monthly: Optional[str] = None
+    stripe_link_songbird_yearly: Optional[str] = None
+    stripe_link_flock_monthly: Optional[str] = None
+    stripe_link_flock_yearly: Optional[str] = None
+
+    # Google integrations
+    google_api_key: Optional[str] = None       # PageSpeed Insights / CrUX
+    google_access_token: Optional[str] = None  # GSC (temporary; replace with OAuth)
+
     class Config:
         env_prefix = "LINKCANARY_"
         env_file = ".env"
