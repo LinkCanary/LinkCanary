@@ -67,5 +67,11 @@ def test_normalize_domain_strips_www_and_port():
     assert normalize_domain("https://blog.example.com/sitemap.xml") == "blog.example.com"
 
 
+def test_normalize_domain_scheme_less():
+    assert normalize_domain("example.com/sitemap.xml") == "example.com"
+    assert normalize_domain("www.example.com") == "example.com"
+    assert normalize_domain("example.com") == "example.com"
+
+
 def test_normalize_domain_non_url_fallback():
     assert normalize_domain("not a url") == "not a url"
