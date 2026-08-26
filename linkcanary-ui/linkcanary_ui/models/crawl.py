@@ -5,8 +5,8 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import JSON, DateTime, Enum, Float, Integer, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import JSON, DateTime, Enum, Float, ForeignKey, Integer, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
 
@@ -32,6 +32,12 @@ class Crawl(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     sitemap_url: Mapped[str] = mapped_column(Text, nullable=False)
+    org_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    project_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("projects.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     status: Mapped[CrawlStatus] = mapped_column(
         Enum(CrawlStatus),
         default=CrawlStatus.PENDING,
@@ -74,6 +80,8 @@ class Crawl(Base):
     celery_task_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     share_token: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, unique=True)
 
+    project: Mapped[Optional["Project"]] = relationship(back_populates="crawls")  # noqa: F821
+
     @property
     def duration_seconds(self) -> Optional[float]:
         """Calculate crawl duration."""
@@ -97,6 +105,7 @@ class Crawl(Base):
             "id": self.id,
             "name": self.name,
             "sitemap_url": self.sitemap_url,
+            "project_id": self.project_id,
             "status": self.status.value,
             "settings": {
                 "internal_only": self.internal_only,
