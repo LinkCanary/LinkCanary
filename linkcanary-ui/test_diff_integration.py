@@ -403,3 +403,43 @@ async def test_delete_crawl_org_isolation(harness):
     assert r.status_code == 404
 
 
+@pytest.mark.asyncio
+async def test_diff_picks_most_recent_prior(harness):
+    from datetime import datetime, timedelta
+
+    client, Session, org_id, tmp_path = harness
+    r1 = tmp_path / "r1.csv"
+    _write_report(r1, [_issue("https://x.com/one")])
+    r2 = tmp_path / "r2.csv"
+    _write_report(r2, [_issue("https://x.com/two")])
+    r3 = tmp_path / "r3.csv"
+    _write_report(r3, [_issue("https://x.com/three")])
+
+    base = datetime.utcnow()
+    async with Session() as s:
+        project = await resolve_or_create_project(s, org_id, "https://x.com/sitemap.xml")
+        c1 = Crawl(name="c1", sitemap_url="https://x.com/sitemap.xml", org_id=org_id,
+                   project_id=project.id, status=CrawlStatus.COMPLETED,
+                   report_csv_path=str(r1), created_at=base - timedelta(days=2))
+        c2 = Crawl(name="c2", sitemap_url="https://x.com/sitemap.xml", org_id=org_id,
+                   project_id=project.id, status=CrawlStatus.COMPLETED,
+                   report_csv_path=str(r2), created_at=base - timedelta(days=1))
+        c3 = Crawl(name="c3", sitemap_url="https://x.com/sitemap.xml", org_id=org_id,
+                   project_id=project.id, status=CrawlStatus.COMPLETED,
+                   report_csv_path=str(r3), created_at=base)
+        s.add_all([c1, c2, c3])
+        await s.commit()
+        await s.refresh(c1)
+        await s.refresh(c2)
+        await s.refresh(c3)
+
+    r = await client.get(f"/api/crawls/{c3.id}/diff")
+    assert r.status_code == 200, r.text
+    d = r.json()
+    # Most recent prior is c2 (not c1)
+    assert d["against_crawl_id"] == c2.id
+    assert [i["link_url"] for i in d["new"]["issues"]["high"]] == ["https://x.com/three"]
+    assert [i["link_url"] for i in d["resolved"]["issues"]["high"]] == ["https://x.com/two"]
+
+
+

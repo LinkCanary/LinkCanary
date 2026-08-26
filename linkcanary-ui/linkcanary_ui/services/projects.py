@@ -29,8 +29,13 @@ def normalize_domain(url: str) -> str:
         host = urlparse(url).netloc.lower()
     except Exception:
         host = ""
+    if not host and url:
+        # No scheme (e.g. "example.com/sitemap.xml") → urlparse treats it as a
+        # path. Retry with a leading "//" so the host parses out correctly.
+        host = urlparse("//" + str(url).lstrip("/")).netloc.lower()
     if not host:
-        # Fall back to the raw string so callers always get a non-empty key.
+        # Last resort: fall back to the raw string so callers always get a
+        # non-empty key.
         host = url.lower()
     host = host.split(":", 1)[0]  # strip port
     if host.startswith("www."):
