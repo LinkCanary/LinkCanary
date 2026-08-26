@@ -12,6 +12,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from link_checker.checker import LinkChecker
+from link_checker.content_health import extract_page_metadata, generate_content_findings
 from link_checker.crawler import PageCrawler
 from link_checker.html_reporter import HTMLReportGenerator
 from link_checker.reporter import ReportGenerator
@@ -150,6 +151,7 @@ def _run_crawl_sync(crawl_id: str):
         )
         
         all_links = []
+        page_metadatas = []
         
         try:
             for i, url in enumerate(page_urls):
@@ -160,8 +162,11 @@ def _run_crawl_sync(crawl_id: str):
                 if crawl_check and crawl_check.status == CrawlStatus.CANCELLED:
                     break
                 
-                links = crawler.crawl_page(url)
+                links, html = crawler.crawl_page_with_html(url)
                 all_links.extend(links)
+                meta = extract_page_metadata(url, html)
+                if meta is not None:
+                    page_metadatas.append(meta)
                 
                 crawl.pages_crawled = i + 1
                 session.commit()
@@ -234,6 +239,14 @@ def _run_crawl_sync(crawl_id: str):
         if orphan_count > 0:
             import pandas as pd
             df = pd.concat([df, orphan_df], ignore_index=True)
+
+        # Content-health signals (title/meta/H1/alt/thin content)
+        if page_metadatas:
+            content_findings = generate_content_findings(page_metadatas)
+            if content_findings:
+                import pandas as pd
+                content_df = pd.DataFrame([vars(r) for r in content_findings])
+                df = pd.concat([df, content_df], ignore_index=True)
 
         reporter.save_report(df, str(csv_path))
 
