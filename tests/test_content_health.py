@@ -3,9 +3,12 @@
 from link_checker.content_health import (
     DEFAULT_THIN_CONTENT_WORDS,
     PageMetadata,
+    compute_click_depths,
     extract_page_metadata,
+    generate_click_depth_findings,
     generate_content_findings,
 )
+from link_checker.crawler import ExtractedLink
 
 
 def _thick(extra=""):
@@ -64,3 +67,54 @@ def test_clean_page_produces_no_findings():
     m = PageMetadata(url="https://x.com/p", title="Unique", meta_description="Unique meta",
                      h1_texts=["Heading"], word_count=200)
     assert generate_content_findings([m]) == []
+
+
+def _link(src, dst, internal=True):
+    return ExtractedLink(source_url=src, link_url=dst, link_text="", is_internal=internal)
+
+
+def test_click_depths_bfs():
+    pages = [
+        "https://x.com/",          # homepage, depth 0
+        "https://x.com/about",     # depth 1
+        "https://x.com/team",      # depth 2
+        "https://x.com/deep",      # depth 3
+        "https://x.com/orphan",    # unreachable
+    ]
+    links = [
+        _link("https://x.com/", "https://x.com/about"),
+        _link("https://x.com/about", "https://x.com/team"),
+        _link("https://x.com/team", "https://x.com/deep"),
+    ]
+    depths = compute_click_depths(pages, links)
+    assert depths["https://x.com/"] == 0
+    assert depths["https://x.com/about"] == 1
+    assert depths["https://x.com/team"] == 2
+    assert depths["https://x.com/deep"] == 3
+    assert depths["https://x.com/orphan"] is None
+
+
+def test_click_depth_findings_flag_deep_and_unreachable():
+    depths = {
+        "https://x.com/": 0,
+        "https://x.com/a": 2,
+        "https://x.com/deep": 4,     # > default max depth 3
+        "https://x.com/orphan": None,
+    }
+    findings = generate_click_depth_findings(depths)
+    types = {f.issue_type for f in findings}
+    assert "deep_page" in types
+    assert "unreachable_page" in types
+    # shallow pages not flagged
+    flagged_urls = {f.link_url for f in findings}
+    assert "https://x.com/" not in flagged_urls
+    assert "https://x.com/a" not in flagged_urls
+
+
+def test_click_depths_ignores_external_links():
+    pages = ["https://x.com/", "https://x.com/about"]
+    links = [
+        _link("https://x.com/", "https://external.com/", internal=False),
+    ]
+    depths = compute_click_depths(pages, links)
+    assert depths["https://x.com/about"] is None  # no internal link reaches it

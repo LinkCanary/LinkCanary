@@ -27,6 +27,8 @@ const issueTypeLabels = {
   multiple_h1: 'Multiple H1 Tags',
   missing_alt: 'Missing Alt Text',
   thin_content: 'Thin Content',
+  deep_page: 'Deep Page',
+  unreachable_page: 'Unreachable Page',
   ok: 'OK',
   error: 'Error',
 };
@@ -52,6 +54,8 @@ const issueTypeBadgeVariants = {
   multiple_h1: 'medium',
   missing_alt: 'low',
   thin_content: 'low',
+  deep_page: 'low',
+  unreachable_page: 'low',
   ok: 'success',
   error: 'critical',
 };
