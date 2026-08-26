@@ -35,26 +35,29 @@ def upgrade() -> None:
     op.create_index("ix_projects_domain", "projects", ["domain"])
 
     # Existing local data is dev-only → fresh Postgres start per the migration
-    # spec. Columns are added NOT NULL; a non-empty dev table should be reset.
-    op.add_column("crawls", sa.Column("org_id", sa.String(36), nullable=False))
-    op.add_column("crawls", sa.Column("project_id", sa.String(36), nullable=True))
-    op.create_foreign_key(
-        "fk_crawls_org_id", "crawls", "organizations", ["org_id"], ["id"], ondelete="CASCADE"
-    )
-    op.create_foreign_key(
-        "fk_crawls_project_id", "crawls", "projects", ["project_id"], ["id"], ondelete="SET NULL"
-    )
-    op.create_index("ix_crawls_org_id", "crawls", ["org_id"])
-    op.create_index("ix_crawls_project_id", "crawls", ["project_id"])
+    # spec. org_id is added NOT NULL; a non-empty dev table must be reset.
+    # batch_alter_table keeps the ALTER portable across SQLite and Postgres.
+    with op.batch_alter_table("crawls") as batch_op:
+        batch_op.add_column(sa.Column("org_id", sa.String(36), nullable=False))
+        batch_op.add_column(sa.Column("project_id", sa.String(36), nullable=True))
+        batch_op.create_foreign_key(
+            "fk_crawls_org_id", "organizations", ["org_id"], ["id"], ondelete="CASCADE"
+        )
+        batch_op.create_foreign_key(
+            "fk_crawls_project_id", "projects", ["project_id"], ["id"], ondelete="SET NULL"
+        )
+        batch_op.create_index("ix_crawls_org_id", ["org_id"])
+        batch_op.create_index("ix_crawls_project_id", ["project_id"])
 
 
 def downgrade() -> None:
-    op.drop_index("ix_crawls_project_id", table_name="crawls")
-    op.drop_index("ix_crawls_org_id", table_name="crawls")
-    op.drop_constraint("fk_crawls_project_id", "crawls", type_="foreignkey")
-    op.drop_constraint("fk_crawls_org_id", "crawls", type_="foreignkey")
-    op.drop_column("crawls", "project_id")
-    op.drop_column("crawls", "org_id")
+    with op.batch_alter_table("crawls") as batch_op:
+        batch_op.drop_index("ix_crawls_project_id")
+        batch_op.drop_index("ix_crawls_org_id")
+        batch_op.drop_constraint("fk_crawls_project_id", type_="foreignkey")
+        batch_op.drop_constraint("fk_crawls_org_id", type_="foreignkey")
+        batch_op.drop_column("project_id")
+        batch_op.drop_column("org_id")
     op.drop_index("ix_projects_domain", table_name="projects")
     op.drop_index("ix_projects_org_id", table_name="projects")
     op.drop_table("projects")

@@ -11,6 +11,7 @@ import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from linkcanary_ui.api import crawls
@@ -203,3 +204,68 @@ async def test_resolve_or_create_project_same_domain_groups(harness):
         p3 = await resolve_or_create_project(s, org_id, "https://blog.example.com/sitemap.xml")
         assert p1.id == p2.id
         assert p1.id != p3.id
+
+
+@pytest.mark.asyncio
+async def test_create_crawl_groups_by_domain_and_sets_org(harness, monkeypatch):
+    client, Session, org_id, tmp_path = harness
+    monkeypatch.setattr(crawls, "run_crawl_in_background", lambda *a, **k: None)
+
+    r1 = await client.post("/api/crawls", json={"sitemap_url": "https://x.com"})
+    assert r1.status_code == 200, r1.text
+    pid1 = r1.json()["project_id"]
+    assert pid1
+
+    # Same domain (www stripped) → same project
+    r2 = await client.post("/api/crawls", json={"sitemap_url": "https://www.x.com/sitemap.xml"})
+    assert r2.status_code == 200, r2.text
+    assert r2.json()["project_id"] == pid1
+
+    # Different domain → different project
+    r3 = await client.post("/api/crawls", json={"sitemap_url": "https://y.com"})
+    assert r3.status_code == 200, r3.text
+    assert r3.json()["project_id"] != pid1
+
+    async with Session() as s:
+        rows = (await s.execute(select(Crawl))).scalars().all()
+        assert len(rows) == 3
+        assert all(c.org_id == org_id for c in rows)
+
+
+@pytest.mark.asyncio
+async def test_rerun_preserves_project(harness, monkeypatch):
+    client, Session, org_id, tmp_path = harness
+    monkeypatch.setattr(crawls, "run_crawl_in_background", lambda *a, **k: None)
+
+    r1 = await client.post("/api/crawls", json={"sitemap_url": "https://x.com"})
+    crawl_id = r1.json()["id"]
+    pid = r1.json()["project_id"]
+
+    r2 = await client.post(f"/api/crawls/{crawl_id}/rerun")
+    assert r2.status_code == 200, r2.text
+    assert r2.json()["project_id"] == pid
+    assert r2.json()["id"] != crawl_id
+
+
+@pytest.mark.asyncio
+async def test_list_crawls_scoped_to_org(harness):
+    client, Session, org_id, tmp_path = harness
+    async with Session() as s:
+        other = Organization(name="Other", slug="other")
+        s.add(other)
+        await s.commit()
+        await s.refresh(other)
+        s.add_all([
+            Crawl(name="mine", sitemap_url="https://x.com/sitemap.xml", org_id=org_id,
+                  status=CrawlStatus.COMPLETED),
+            Crawl(name="foreign", sitemap_url="https://z.com/sitemap.xml", org_id=other.id,
+                  status=CrawlStatus.COMPLETED),
+        ])
+        await s.commit()
+
+    r = await client.get("/api/crawls")
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["total"] == 1
+    assert data["crawls"][0]["name"] == "mine"
+
