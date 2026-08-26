@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..deps.auth import RequestContext, get_current_user
 from ..models import Crawl, CrawlStatus, get_db
 from ..models.schemas import StatsResponse
 
@@ -13,9 +14,12 @@ router = APIRouter(prefix="/api/stats", tags=["stats"])
 
 
 @router.get("", response_model=StatsResponse)
-async def get_stats(db: AsyncSession = Depends(get_db)):
-    """Get dashboard statistics."""
-    result = await db.execute(select(Crawl))
+async def get_stats(
+    db: AsyncSession = Depends(get_db),
+    ctx: RequestContext = Depends(get_current_user),
+):
+    """Get dashboard statistics scoped to the authenticated org."""
+    result = await db.execute(select(Crawl).where(Crawl.org_id == ctx.org_id))
     crawls = result.scalars().all()
     
     total_crawls = len(crawls)
