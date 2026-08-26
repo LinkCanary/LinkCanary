@@ -39,6 +39,11 @@ export const crawlsApi = {
   
   getReport: (id) => fetchJson(`${API_BASE}/crawls/${id}/report`),
 
+  getDiff: (id, against = null) => {
+    const params = against && against !== 'latest' ? `?against=${encodeURIComponent(against)}` : '';
+    return fetchJson(`${API_BASE}/crawls/${id}/diff${params}`);
+  },
+
   getTransparency: (id) => fetchJson(`${API_BASE}/crawls/${id}/transparency`),
 
   share: (id) => fetchJson(`${API_BASE}/crawls/${id}/share`, { method: 'POST' }),

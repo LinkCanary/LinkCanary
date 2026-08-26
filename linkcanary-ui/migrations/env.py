@@ -16,6 +16,7 @@ from linkcanary_ui.models import Base
 import linkcanary_ui.models.crawl  # noqa: F401
 import linkcanary_ui.models.webhook  # noqa: F401
 import linkcanary_ui.models.auth  # noqa: F401
+import linkcanary_ui.models.project  # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.sync_db_url)

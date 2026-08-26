@@ -469,6 +469,104 @@ function ShareModal({ crawlId, onClose }) {
   );
 }
 
+function DiffPanel({ crawlId }) {
+  const [diff, setDiff] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [tab, setTab] = useState('new');
+
+  useEffect(() => {
+    crawlsApi.getDiff(crawlId)
+      .then(setDiff)
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+  }, [crawlId]);
+
+  if (loading) {
+    return (
+      <Card>
+        <CardBody className="text-center py-6 text-gray-500">
+          Loading diff…
+        </CardBody>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardBody className="text-center py-6">
+          <p className="text-gray-500 mb-2">No previous crawl to compare against.</p>
+          <p className="text-xs text-gray-400">Run the same site twice to see what changed.</p>
+        </CardBody>
+      </Card>
+    );
+  }
+
+  const sections = {
+    new: { label: 'New', color: 'text-red-600', data: diff?.new },
+    resolved: { label: 'Resolved', color: 'text-green-600', data: diff?.resolved },
+    persistent: { label: 'Persistent', color: 'text-gray-600', data: diff?.persistent },
+  };
+
+  const active = sections[tab]?.data;
+  const flattenIssues = (data) => {
+    if (!data?.issues) return [];
+    return Object.values(data.issues).flat();
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="font-semibold text-gray-900 dark:text-primary">What Changed</h2>
+          <span className="text-xs text-gray-400">since previous crawl</span>
+        </div>
+      </CardHeader>
+      <CardBody className="space-y-4">
+        {/* Summary headline */}
+        <div className="grid grid-cols-3 gap-4">
+          {Object.entries(sections).map(([key, s]) => (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              className={`rounded-lg border p-4 text-left transition ${
+                tab === key ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+              }`}
+            >
+              <div className={`text-2xl font-bold ${s.color}`}>
+                {s.data?.counts?.total ?? 0}
+              </div>
+              <div className="text-xs text-gray-500">{s.label}</div>
+              {(s.data?.counts?.critical ?? 0) > 0 && (
+                <div className="text-xs text-red-600 mt-1">
+                  {s.data.counts.critical} critical
+                </div>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Tabbed issue list */}
+        <div>
+          <div className="text-sm font-medium text-gray-700 mb-2">
+            {sections[tab].label} issues ({active?.counts?.total ?? 0})
+          </div>
+          {flattenIssues(active).length === 0 ? (
+            <p className="text-sm text-gray-400 py-4">Nothing here — no {sections[tab].label.toLowerCase()} issues.</p>
+          ) : (
+            <div className="grid md:grid-cols-2 gap-4">
+              {flattenIssues(active).map((issue, i) => (
+                <IssueCard key={`${tab}-${i}`} issue={issue} />
+              ))}
+            </div>
+          )}
+        </div>
+      </CardBody>
+    </Card>
+  );
+}
+
 export default function ReportViewer() {
   const { id } = useParams();
   const [crawl, setCrawl] = useState(null);
@@ -606,6 +704,8 @@ export default function ReportViewer() {
       </div>
 
       <TransparencyPanel transparency={transparency} />
+
+      <DiffPanel crawlId={id} />
 
       <Card>
         <CardBody>
