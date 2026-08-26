@@ -269,3 +269,137 @@ async def test_list_crawls_scoped_to_org(harness):
     assert data["total"] == 1
     assert data["crawls"][0]["name"] == "mine"
 
+
+@pytest.mark.asyncio
+async def test_get_report_parses_all_fields(harness):
+    """Regression guard for the shared report-loader refactor."""
+    client, Session, org_id, tmp_path = harness
+    csv_path = tmp_path / "report.csv"
+    _write_report(csv_path, [{
+        "source_page": "multiple",
+        "occurrence_count": 3,
+        "example_pages": "https://x.com/p1|https://x.com/p2",
+        "link_url": "https://x.com/broken",
+        "link_text": "click here",
+        "link_type": "internal",
+        "element_type": "a",
+        "status_code": 404,
+        "issue_type": "broken_404",
+        "priority": "high",
+        "redirect_chain": "301: https://x.com/a",
+        "final_url": "https://x.com/final",
+        "recommended_fix": "Fix it",
+        "response_time_ms": "123.5",
+        "anchor_quality": "weak",
+    }])
+
+    async with Session() as s:
+        crawl = Crawl(name="c", sitemap_url="https://x.com/sitemap.xml", org_id=org_id,
+                      status=CrawlStatus.COMPLETED, report_csv_path=str(csv_path))
+        s.add(crawl)
+        await s.commit()
+        await s.refresh(crawl)
+        crawl_id = crawl.id
+
+    r = await client.get(f"/api/crawls/{crawl_id}/report")
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["total"] == 1
+    i = data["issues"][0]
+    assert i["link_url"] == "https://x.com/broken"
+    assert i["occurrence_count"] == 3
+    assert i["example_pages"] == ["https://x.com/p1", "https://x.com/p2"]
+    assert i["status_code"] == 404
+    assert i["response_time_ms"] == 123.5
+    assert i["anchor_quality"] == "weak"
+    assert i["redirect_chain"] == "301: https://x.com/a"
+
+
+@pytest.mark.asyncio
+async def test_get_shared_report_public(harness):
+    client, Session, org_id, tmp_path = harness
+    csv_path = tmp_path / "report.csv"
+    _write_report(csv_path, [_issue("https://x.com/broken")])
+
+    async with Session() as s:
+        crawl = Crawl(name="c", sitemap_url="https://x.com/sitemap.xml", org_id=org_id,
+                      status=CrawlStatus.COMPLETED, report_csv_path=str(csv_path),
+                      share_token="tok123")
+        s.add(crawl)
+        await s.commit()
+
+    r = await client.get("/api/crawls/shared/tok123")
+    assert r.status_code == 200, r.text
+    assert r.json()["total"] == 1
+    assert r.json()["issues"][0]["link_url"] == "https://x.com/broken"
+
+
+@pytest.mark.asyncio
+async def test_diff_explicit_against(harness):
+    client, Session, org_id, tmp_path = harness
+    cur_csv = tmp_path / "cur.csv"
+    _write_report(cur_csv, [_issue("https://x.com/new")])
+    prior_csv = tmp_path / "prior.csv"
+    _write_report(prior_csv, [_issue("https://x.com/old")])
+
+    async with Session() as s:
+        project = await resolve_or_create_project(s, org_id, "https://x.com/sitemap.xml")
+        prior = Crawl(name="p", sitemap_url="https://x.com/sitemap.xml", org_id=org_id,
+                      project_id=project.id, status=CrawlStatus.COMPLETED, report_csv_path=str(prior_csv))
+        cur = Crawl(name="c", sitemap_url="https://x.com/sitemap.xml", org_id=org_id,
+                    project_id=project.id, status=CrawlStatus.COMPLETED, report_csv_path=str(cur_csv))
+        s.add_all([prior, cur])
+        await s.commit()
+        await s.refresh(prior)
+        await s.refresh(cur)
+
+    r = await client.get(f"/api/crawls/{cur.id}/diff?against={prior.id}")
+    assert r.status_code == 200, r.text
+    assert r.json()["against_crawl_id"] == prior.id
+    assert [i["link_url"] for i in r.json()["new"]["issues"]["high"]] == ["https://x.com/new"]
+
+
+@pytest.mark.asyncio
+async def test_diff_identical_crawls_empty(harness):
+    client, Session, org_id, tmp_path = harness
+    csv_path = tmp_path / "same.csv"
+    _write_report(csv_path, [_issue("https://x.com/same")])
+
+    async with Session() as s:
+        project = await resolve_or_create_project(s, org_id, "https://x.com/sitemap.xml")
+        prior = Crawl(name="p", sitemap_url="https://x.com/sitemap.xml", org_id=org_id,
+                      project_id=project.id, status=CrawlStatus.COMPLETED, report_csv_path=str(csv_path))
+        cur = Crawl(name="c", sitemap_url="https://x.com/sitemap.xml", org_id=org_id,
+                    project_id=project.id, status=CrawlStatus.COMPLETED, report_csv_path=str(csv_path))
+        s.add_all([prior, cur])
+        await s.commit()
+        await s.refresh(prior)
+        await s.refresh(cur)
+
+    r = await client.get(f"/api/crawls/{cur.id}/diff")
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["new"]["counts"]["total"] == 0
+    assert d["resolved"]["counts"]["total"] == 0
+    assert d["persistent"]["counts"]["total"] == 1
+    assert [i["link_url"] for i in d["persistent"]["issues"]["high"]] == ["https://x.com/same"]
+
+
+@pytest.mark.asyncio
+async def test_delete_crawl_org_isolation(harness):
+    client, Session, org_id, tmp_path = harness
+    async with Session() as s:
+        other = Organization(name="Other", slug="other")
+        s.add(other)
+        await s.commit()
+        await s.refresh(other)
+        crawl = Crawl(name="foreign", sitemap_url="https://z.com/sitemap.xml",
+                      org_id=other.id, status=CrawlStatus.COMPLETED)
+        s.add(crawl)
+        await s.commit()
+        await s.refresh(crawl)
+
+    r = await client.delete(f"/api/crawls/{crawl.id}")
+    assert r.status_code == 404
+
+
