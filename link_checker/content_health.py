@@ -13,17 +13,22 @@ already fetched during the crawl) and heuristic:
 
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from typing import Optional
+from urllib.parse import urlparse, urlunparse
 
 from bs4 import BeautifulSoup
 
 from .content_extractor import extract_main_text
 from .reporter import ReportRow
+from .utils import normalize_url
 
 # Pages with fewer than this many main-content words are flagged as thin.
 DEFAULT_THIN_CONTENT_WORDS = 100
+
+# Pages deeper than this many clicks from the homepage are flagged as buried.
+DEFAULT_MAX_CLICK_DEPTH = 3
 
 
 @dataclass
@@ -184,4 +189,95 @@ def generate_content_findings(
                 "avoid being treated as thin/boilerplate content.",
             ))
 
+    return rows
+
+
+def _graph_key(url: str) -> str:
+    """Normalize a URL for link-graph comparison (lowercase, strip trailing slash)."""
+    normed = normalize_url(url)
+    parsed = urlparse(normed)
+    path = parsed.path.rstrip("/")
+    return urlunparse((parsed.scheme, parsed.netloc, path, "", parsed.query, ""))
+
+
+def _find_homepage(page_urls: list[str]) -> str:
+    """Pick the page most likely to be the homepage: the shallowest URL path."""
+    best = page_urls[0]
+    best_depth = None
+    for url in page_urls:
+        parsed = urlparse(normalize_url(url))
+        path = parsed.path.rstrip("/")
+        depth = len([seg for seg in path.split("/") if seg])
+        if best_depth is None or depth < best_depth:
+            best, best_depth = url, depth
+    return best
+
+
+def compute_click_depths(
+    page_urls: list[str],
+    links: list,
+) -> dict[str, Optional[int]]:
+    """Compute each page's click depth (BFS from the homepage over internal links).
+
+    Args:
+        page_urls: All crawled page URLs (sitemap pages).
+        links: ``ExtractedLink`` objects collected during the crawl.
+
+    Returns:
+        Mapping of original page URL → depth, or ``None`` if the page cannot be
+        reached from the homepage via any chain of internal links.
+    """
+    if not page_urls:
+        return {}
+
+    page_set = {_graph_key(u) for u in page_urls}
+    adjacency: dict[str, set[str]] = defaultdict(set)
+    for link in links:
+        if not getattr(link, "is_internal", False):
+            continue
+        src = _graph_key(link.source_url)
+        dst = _graph_key(link.link_url)
+        if src in page_set and dst in page_set and src != dst:
+            adjacency[src].add(dst)
+
+    start = _graph_key(_find_homepage(page_urls))
+    depths: dict[str, int] = {start: 0}
+    queue = deque([start])
+    while queue:
+        cur = queue.popleft()
+        for nxt in adjacency.get(cur, ()):
+            if nxt not in depths:
+                depths[nxt] = depths[cur] + 1
+                queue.append(nxt)
+
+    return {url: depths.get(_graph_key(url)) for url in page_urls}
+
+
+def generate_click_depth_findings(
+    depths: dict[str, Optional[int]],
+    max_depth: int = DEFAULT_MAX_CLICK_DEPTH,
+) -> list[ReportRow]:
+    """Flag pages that are buried deep or unreachable from the homepage.
+
+    Args:
+        depths: Mapping of page URL → click depth (or ``None`` if unreachable).
+        max_depth: Depth above which a page is considered "buried".
+
+    Returns:
+        List of ``ReportRow`` findings.
+    """
+    rows: list[ReportRow] = []
+    for url, depth in depths.items():
+        if depth is None:
+            rows.append(_row(
+                url, "unreachable_page", "low",
+                "This page cannot be reached from the homepage via internal "
+                "links. Add navigation links to it or restructure the site.",
+            ))
+        elif depth > max_depth:
+            rows.append(_row(
+                url, "deep_page", "low",
+                f"Page is {depth} clicks from the homepage (max recommended {max_depth}). "
+                "Add more direct links to surface important pages.",
+            ))
     return rows

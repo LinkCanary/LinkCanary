@@ -12,7 +12,12 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from link_checker.checker import LinkChecker
-from link_checker.content_health import extract_page_metadata, generate_content_findings
+from link_checker.content_health import (
+    compute_click_depths,
+    extract_page_metadata,
+    generate_click_depth_findings,
+    generate_content_findings,
+)
 from link_checker.crawler import PageCrawler
 from link_checker.html_reporter import HTMLReportGenerator
 from link_checker.reporter import ReportGenerator
@@ -240,13 +245,17 @@ def _run_crawl_sync(crawl_id: str):
             import pandas as pd
             df = pd.concat([df, orphan_df], ignore_index=True)
 
-        # Content-health signals (title/meta/H1/alt/thin content)
+        # Content-health signals (title/meta/H1/alt/thin content + click depth)
+        content_findings = []
         if page_metadatas:
-            content_findings = generate_content_findings(page_metadatas)
-            if content_findings:
-                import pandas as pd
-                content_df = pd.DataFrame([vars(r) for r in content_findings])
-                df = pd.concat([df, content_df], ignore_index=True)
+            content_findings.extend(generate_content_findings(page_metadatas))
+        if not crawl.external_only:
+            depths = compute_click_depths(page_urls, all_links)
+            content_findings.extend(generate_click_depth_findings(depths))
+        if content_findings:
+            import pandas as pd
+            content_df = pd.DataFrame([vars(r) for r in content_findings])
+            df = pd.concat([df, content_df], ignore_index=True)
 
         reporter.save_report(df, str(csv_path))
 

@@ -68,6 +68,8 @@ class HTMLReportGenerator:
                 'multiple_h1': 0,
                 'missing_alt': 0,
                 'thin_content': 0,
+                'deep_page': 0,
+                'unreachable_page': 0,
             },
         }
         
@@ -195,6 +197,8 @@ class HTMLReportGenerator:
                 <option value="multiple_h1">Multiple H1</option>
                 <option value="missing_alt">Missing Alt Text</option>
                 <option value="thin_content">Thin Content</option>
+                <option value="deep_page">Deep Page</option>
+                <option value="unreachable_page">Unreachable Page</option>
                 <option value="ok">OK</option>
             </select>
         </div>
@@ -906,6 +910,8 @@ function createIssueCard(item) {
         'multiple_h1': 'badge-redirect',
         'missing_alt': 'badge-ok',
         'thin_content': 'badge-ok',
+        'deep_page': 'badge-ok',
+        'unreachable_page': 'badge-ok',
     }[item.issue_type] || 'badge-redirect';
     
     const issueTypeLabel = {
@@ -927,6 +933,8 @@ function createIssueCard(item) {
         'multiple_h1': 'Multiple H1',
         'missing_alt': 'Missing Alt Text',
         'thin_content': 'Thin Content',
+        'deep_page': 'Deep Page',
+        'unreachable_page': 'Unreachable Page',
     }[item.issue_type] || item.issue_type;
     
     const occurrenceCount = parseInt(item.occurrence_count) || 1;
