@@ -70,6 +70,10 @@ class HTMLReportGenerator:
                 'thin_content': 0,
                 'deep_page': 0,
                 'unreachable_page': 0,
+                'invalid_json_ld': 0,
+                'missing_schema_context': 0,
+                'missing_schema_type': 0,
+                'schema_missing_fields': 0,
             },
         }
         
@@ -199,6 +203,10 @@ class HTMLReportGenerator:
                 <option value="thin_content">Thin Content</option>
                 <option value="deep_page">Deep Page</option>
                 <option value="unreachable_page">Unreachable Page</option>
+                <option value="invalid_json_ld">Invalid JSON-LD</option>
+                <option value="missing_schema_context">Missing Schema Context</option>
+                <option value="missing_schema_type">Missing Schema Type</option>
+                <option value="schema_missing_fields">Schema Missing Fields</option>
                 <option value="ok">OK</option>
             </select>
         </div>
@@ -912,6 +920,10 @@ function createIssueCard(item) {
         'thin_content': 'badge-ok',
         'deep_page': 'badge-ok',
         'unreachable_page': 'badge-ok',
+        'invalid_json_ld': 'badge-broken',
+        'missing_schema_context': 'badge-redirect',
+        'missing_schema_type': 'badge-redirect',
+        'schema_missing_fields': 'badge-ok',
     }[item.issue_type] || 'badge-redirect';
     
     const issueTypeLabel = {
@@ -935,6 +947,10 @@ function createIssueCard(item) {
         'thin_content': 'Thin Content',
         'deep_page': 'Deep Page',
         'unreachable_page': 'Unreachable Page',
+        'invalid_json_ld': 'Invalid JSON-LD',
+        'missing_schema_context': 'Missing Schema Context',
+        'missing_schema_type': 'Missing Schema Type',
+        'schema_missing_fields': 'Schema Missing Fields',
     }[item.issue_type] || item.issue_type;
     
     const occurrenceCount = parseInt(item.occurrence_count) || 1;

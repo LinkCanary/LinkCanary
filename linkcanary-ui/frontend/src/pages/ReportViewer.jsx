@@ -29,6 +29,10 @@ const issueTypeLabels = {
   thin_content: 'Thin Content',
   deep_page: 'Deep Page',
   unreachable_page: 'Unreachable Page',
+  invalid_json_ld: 'Invalid JSON-LD',
+  missing_schema_context: 'Missing Schema Context',
+  missing_schema_type: 'Missing Schema Type',
+  schema_missing_fields: 'Schema Missing Fields',
   ok: 'OK',
   error: 'Error',
 };
@@ -56,6 +60,10 @@ const issueTypeBadgeVariants = {
   thin_content: 'low',
   deep_page: 'low',
   unreachable_page: 'low',
+  invalid_json_ld: 'high',
+  missing_schema_context: 'medium',
+  missing_schema_type: 'medium',
+  schema_missing_fields: 'low',
   ok: 'success',
   error: 'critical',
 };
