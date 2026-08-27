@@ -49,6 +49,7 @@ class Crawl(Base):
     skip_ok: Mapped[bool] = mapped_column(default=True)
     expand_duplicates: Mapped[bool] = mapped_column(default=False)
     include_subdomains: Mapped[bool] = mapped_column(default=False)
+    check_core_web_vitals: Mapped[bool] = mapped_column(default=False)
     delay: Mapped[float] = mapped_column(Float, default=0.5)
     timeout: Mapped[int] = mapped_column(Integer, default=10)
     max_pages: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -113,6 +114,7 @@ class Crawl(Base):
                 "skip_ok": self.skip_ok,
                 "expand_duplicates": self.expand_duplicates,
                 "include_subdomains": self.include_subdomains,
+                "check_core_web_vitals": self.check_core_web_vitals,
                 "delay": self.delay,
                 "timeout": self.timeout,
                 "max_pages": self.max_pages,

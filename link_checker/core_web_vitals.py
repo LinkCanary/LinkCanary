@@ -28,6 +28,10 @@ PSI_API_URL = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed"
 GOOD_THRESHOLDS = {"lcp_ms": 2500.0, "inp_ms": 200.0, "cls": 0.1}
 POOR_THRESHOLDS = {"lcp_ms": 4000.0, "inp_ms": 500.0, "cls": 0.25}
 
+# When CWV is run as a crawl signal, check this many pages (PSI is rate-limited
+# and slow, so a full crawl is impractical; sample the first N).
+DEFAULT_CWV_MAX_PAGES = 10
+
 
 class CoreWebVitalsError(RuntimeError):
     """Raised when the PSI API cannot return metrics."""

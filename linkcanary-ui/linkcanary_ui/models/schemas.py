@@ -13,6 +13,7 @@ class CrawlSettings(BaseModel):
     skip_ok: bool = True
     expand_duplicates: bool = False
     include_subdomains: bool = False
+    check_core_web_vitals: bool = False
     delay: float = Field(default=0.5, ge=0.1, le=5.0)
     timeout: int = Field(default=10, ge=5, le=60)
     max_pages: Optional[int] = Field(default=None, ge=1)

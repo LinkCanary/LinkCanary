@@ -74,6 +74,7 @@ class HTMLReportGenerator:
                 'missing_schema_context': 0,
                 'missing_schema_type': 0,
                 'schema_missing_fields': 0,
+                'core_web_vitals': 0,
             },
         }
         
@@ -207,6 +208,7 @@ class HTMLReportGenerator:
                 <option value="missing_schema_context">Missing Schema Context</option>
                 <option value="missing_schema_type">Missing Schema Type</option>
                 <option value="schema_missing_fields">Schema Missing Fields</option>
+                <option value="core_web_vitals">Core Web Vitals</option>
                 <option value="ok">OK</option>
             </select>
         </div>
@@ -924,6 +926,7 @@ function createIssueCard(item) {
         'missing_schema_context': 'badge-redirect',
         'missing_schema_type': 'badge-redirect',
         'schema_missing_fields': 'badge-ok',
+        'core_web_vitals': 'badge-chain',
     }[item.issue_type] || 'badge-redirect';
     
     const issueTypeLabel = {
@@ -951,6 +954,7 @@ function createIssueCard(item) {
         'missing_schema_context': 'Missing Schema Context',
         'missing_schema_type': 'Missing Schema Type',
         'schema_missing_fields': 'Schema Missing Fields',
+        'core_web_vitals': 'Core Web Vitals',
     }[item.issue_type] || item.issue_type;
     
     const occurrenceCount = parseInt(item.occurrence_count) || 1;
