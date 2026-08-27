@@ -45,6 +45,7 @@ sheets = [
     "google-auth>=2.0.0",
     "google-auth-oauthlib>=1.0.0",
 ]
+mcp = ["mcp>=1.0.0"]
 all = [
     "openpyxl>=3.0.0",
     "xlsxwriter>=3.0.0",
@@ -58,6 +59,7 @@ all = [
 [project.scripts]
 linkcheck = "link_checker.cli:main"
 linkcheck-report = "link_checker.report_cli:main"
+linkcanary-mcp = "link_checker.mcp_server:run"
 
 [project.urls]
 Homepage = "https://github.com/chesterbeard/linkcanary"
