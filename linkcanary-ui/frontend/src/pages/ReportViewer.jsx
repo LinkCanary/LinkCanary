@@ -33,6 +33,7 @@ const issueTypeLabels = {
   missing_schema_context: 'Missing Schema Context',
   missing_schema_type: 'Missing Schema Type',
   schema_missing_fields: 'Schema Missing Fields',
+  core_web_vitals: 'Core Web Vitals',
   ok: 'OK',
   error: 'Error',
 };
@@ -64,6 +65,7 @@ const issueTypeBadgeVariants = {
   missing_schema_context: 'medium',
   missing_schema_type: 'medium',
   schema_missing_fields: 'low',
+  core_web_vitals: 'medium',
   ok: 'success',
   error: 'critical',
 };

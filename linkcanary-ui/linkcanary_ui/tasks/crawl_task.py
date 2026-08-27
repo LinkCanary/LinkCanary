@@ -18,6 +18,11 @@ from link_checker.content_health import (
     generate_click_depth_findings,
     generate_content_findings,
 )
+from link_checker.core_web_vitals import (
+    DEFAULT_CWV_MAX_PAGES,
+    PageSpeedInsightsClient,
+    generate_cwv_findings,
+)
 from link_checker.crawler import PageCrawler
 from link_checker.html_reporter import HTMLReportGenerator
 from link_checker.reporter import ReportGenerator
@@ -256,6 +261,14 @@ def _run_crawl_sync(crawl_id: str):
             depths = compute_click_depths(page_urls, all_links)
             content_findings.extend(generate_click_depth_findings(depths))
         content_findings.extend(schema_rows)
+        if crawl.check_core_web_vitals and settings.google_api_key:
+            sample = page_urls[:DEFAULT_CWV_MAX_PAGES]
+            cwv_client = PageSpeedInsightsClient(settings.google_api_key)
+            try:
+                cwv_results = [cwv_client.core_web_vitals(u) for u in sample]
+            finally:
+                cwv_client.close()
+            content_findings.extend(generate_cwv_findings(cwv_results))
         if content_findings:
             import pandas as pd
             content_df = pd.DataFrame([vars(r) for r in content_findings])
