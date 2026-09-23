@@ -11,6 +11,9 @@ venv/
 .DS_Store
 *.zip
 *_report.csv
+.env
+.env.local
+.env.*.local
 
 # Go crawl-engine binary (source is tracked, binary is not)
 crawl-engine/crawl-engine
