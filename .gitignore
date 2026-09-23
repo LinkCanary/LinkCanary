@@ -8,6 +8,9 @@ venv/
 *.egg
 .eggs/
 .factory/
+.DS_Store
+*.zip
+*_report.csv
 
 # Go crawl-engine binary (source is tracked, binary is not)
 crawl-engine/crawl-engine

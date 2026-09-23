@@ -1,7 +1,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/python-3.10%2B-blue" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/version-0.3-green" alt="Version 0.3">
-  <img src="https://img.shields.io/badge/license-MIT-orange" alt="MIT License">
+  <img src="https://img.shields.io/badge/license-AGPL--3.0-orange" alt="AGPL-3.0 License">
 </p>
 
 # LinkCanary
@@ -498,7 +498,7 @@ Contributions are welcome! Whether it's a bug fix, new feature, or documentation
 
 ## License
 
-MIT — use it however you want, commercially or otherwise.
+AGPL-3.0 — see [LICENSE](LICENSE) for details. A commercial license is available for organizations that cannot use AGPL-3.0. Contact [Salish Sea Consulting](https://www.salishseaconsulting.com) for terms.
 
 ---
 
