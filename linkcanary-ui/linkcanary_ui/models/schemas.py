@@ -13,6 +13,7 @@ class CrawlSettings(BaseModel):
     skip_ok: bool = True
     expand_duplicates: bool = False
     include_subdomains: bool = False
+    check_core_web_vitals: bool = False
     delay: float = Field(default=0.5, ge=0.1, le=5.0)
     timeout: int = Field(default=10, ge=5, le=60)
     max_pages: Optional[int] = Field(default=None, ge=1)
@@ -41,6 +42,7 @@ class CrawlResponse(BaseModel):
     id: str
     name: str
     sitemap_url: str
+    project_id: Optional[str] = None
     status: str
     settings: CrawlSettings
     created_at: Optional[datetime]
@@ -185,6 +187,15 @@ class WebhookCreate(BaseModel):
     asana_token: Optional[str] = Field(default=None, description="Asana personal access token")
     asana_workspace_id: Optional[str] = Field(default=None, description="Asana workspace ID")
     asana_project_id: Optional[str] = Field(default=None, description="Asana project ID")
+    # ntfy configuration
+    ntfy_server: Optional[str] = Field(default="https://ntfy.sh", description="ntfy server URL")
+    ntfy_topic: Optional[str] = Field(default=None, description="ntfy topic name")
+    ntfy_token: Optional[str] = Field(default=None, description="ntfy access token (optional)")
+    ntfy_priority: Optional[str] = Field(default="default", description="ntfy priority: min, low, default, high, urgent")
+    # Gotify configuration
+    gotify_url: Optional[str] = Field(default=None, description="Gotify server URL")
+    gotify_token: Optional[str] = Field(default=None, description="Gotify application token")
+    gotify_priority: int = Field(default=5, description="Gotify message priority (0-10)")
 
 
 class WebhookUpdate(BaseModel):
@@ -205,6 +216,15 @@ class WebhookUpdate(BaseModel):
     asana_token: Optional[str] = None
     asana_workspace_id: Optional[str] = None
     asana_project_id: Optional[str] = None
+    # ntfy configuration
+    ntfy_server: Optional[str] = None
+    ntfy_topic: Optional[str] = None
+    ntfy_token: Optional[str] = None
+    ntfy_priority: Optional[str] = None
+    # Gotify configuration
+    gotify_url: Optional[str] = None
+    gotify_token: Optional[str] = None
+    gotify_priority: Optional[int] = None
 
 
 class WebhookResponse(BaseModel):
@@ -227,6 +247,15 @@ class WebhookResponse(BaseModel):
     asana_token: Optional[str]
     asana_workspace_id: Optional[str]
     asana_project_id: Optional[str]
+    # ntfy configuration
+    ntfy_server: Optional[str]
+    ntfy_topic: Optional[str]
+    ntfy_token: Optional[str]
+    ntfy_priority: Optional[str]
+    # Gotify configuration
+    gotify_url: Optional[str]
+    gotify_token: Optional[str]
+    gotify_priority: int
     # Status fields
     created_at: Optional[datetime]
     last_triggered_at: Optional[datetime]
@@ -311,3 +340,28 @@ class ShareResponse(BaseModel):
     """Shareable link response."""
     share_token: str
     share_url: str
+
+
+class DiffCounts(BaseModel):
+    """Issue counts by priority for a diff bucket."""
+    critical: int = 0
+    high: int = 0
+    medium: int = 0
+    low: int = 0
+    info: int = 0
+    total: int = 0
+
+
+class DiffSection(BaseModel):
+    """One category of a diff (new/resolved/persistent), grouped by priority."""
+    counts: DiffCounts
+    issues: dict[str, list[ReportIssue]]
+
+
+class DiffResponse(BaseModel):
+    """Crawl-to-crawl diff: new vs resolved vs persistent issues."""
+    crawl_id: str
+    against_crawl_id: str
+    new: DiffSection
+    resolved: DiffSection
+    persistent: DiffSection

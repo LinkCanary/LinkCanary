@@ -5,8 +5,8 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import JSON, DateTime, Enum, Float, Integer, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import JSON, DateTime, Enum, Float, ForeignKey, Integer, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
 
@@ -32,6 +32,12 @@ class Crawl(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     sitemap_url: Mapped[str] = mapped_column(Text, nullable=False)
+    org_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    project_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("projects.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     status: Mapped[CrawlStatus] = mapped_column(
         Enum(CrawlStatus),
         default=CrawlStatus.PENDING,
@@ -43,6 +49,7 @@ class Crawl(Base):
     skip_ok: Mapped[bool] = mapped_column(default=True)
     expand_duplicates: Mapped[bool] = mapped_column(default=False)
     include_subdomains: Mapped[bool] = mapped_column(default=False)
+    check_core_web_vitals: Mapped[bool] = mapped_column(default=False)
     delay: Mapped[float] = mapped_column(Float, default=0.5)
     timeout: Mapped[int] = mapped_column(Integer, default=10)
     max_pages: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -74,6 +81,8 @@ class Crawl(Base):
     celery_task_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     share_token: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, unique=True)
 
+    project: Mapped[Optional["Project"]] = relationship(back_populates="crawls")  # noqa: F821
+
     @property
     def duration_seconds(self) -> Optional[float]:
         """Calculate crawl duration."""
@@ -97,6 +106,7 @@ class Crawl(Base):
             "id": self.id,
             "name": self.name,
             "sitemap_url": self.sitemap_url,
+            "project_id": self.project_id,
             "status": self.status.value,
             "settings": {
                 "internal_only": self.internal_only,
@@ -104,6 +114,7 @@ class Crawl(Base):
                 "skip_ok": self.skip_ok,
                 "expand_duplicates": self.expand_duplicates,
                 "include_subdomains": self.include_subdomains,
+                "check_core_web_vitals": self.check_core_web_vitals,
                 "delay": self.delay,
                 "timeout": self.timeout,
                 "max_pages": self.max_pages,

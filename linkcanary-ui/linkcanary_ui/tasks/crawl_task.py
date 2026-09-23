@@ -12,9 +12,21 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from link_checker.checker import LinkChecker
+from link_checker.content_health import (
+    compute_click_depths,
+    extract_page_metadata,
+    generate_click_depth_findings,
+    generate_content_findings,
+)
+from link_checker.core_web_vitals import (
+    DEFAULT_CWV_MAX_PAGES,
+    PageSpeedInsightsClient,
+    generate_cwv_findings,
+)
 from link_checker.crawler import PageCrawler
 from link_checker.html_reporter import HTMLReportGenerator
 from link_checker.reporter import ReportGenerator
+from link_checker.schema_validation import validate_page_schema
 from link_checker.sitemap import SitemapParser
 
 from ..config import settings
@@ -150,6 +162,8 @@ def _run_crawl_sync(crawl_id: str):
         )
         
         all_links = []
+        page_metadatas = []
+        schema_rows = []
         
         try:
             for i, url in enumerate(page_urls):
@@ -160,8 +174,12 @@ def _run_crawl_sync(crawl_id: str):
                 if crawl_check and crawl_check.status == CrawlStatus.CANCELLED:
                     break
                 
-                links = crawler.crawl_page(url)
+                links, html = crawler.crawl_page_with_html(url)
                 all_links.extend(links)
+                meta = extract_page_metadata(url, html)
+                if meta is not None:
+                    page_metadatas.append(meta)
+                schema_rows.extend(validate_page_schema(url, html))
                 
                 crawl.pages_crawled = i + 1
                 session.commit()
@@ -234,6 +252,27 @@ def _run_crawl_sync(crawl_id: str):
         if orphan_count > 0:
             import pandas as pd
             df = pd.concat([df, orphan_df], ignore_index=True)
+
+        # Content-health signals (title/meta/H1/alt/thin + click depth + schema)
+        content_findings = []
+        if page_metadatas:
+            content_findings.extend(generate_content_findings(page_metadatas))
+        if not crawl.external_only:
+            depths = compute_click_depths(page_urls, all_links)
+            content_findings.extend(generate_click_depth_findings(depths))
+        content_findings.extend(schema_rows)
+        if crawl.check_core_web_vitals and settings.google_api_key:
+            sample = page_urls[:DEFAULT_CWV_MAX_PAGES]
+            cwv_client = PageSpeedInsightsClient(settings.google_api_key)
+            try:
+                cwv_results = [cwv_client.core_web_vitals(u) for u in sample]
+            finally:
+                cwv_client.close()
+            content_findings.extend(generate_cwv_findings(cwv_results))
+        if content_findings:
+            import pandas as pd
+            content_df = pd.DataFrame([vars(r) for r in content_findings])
+            df = pd.concat([df, content_df], ignore_index=True)
 
         reporter.save_report(df, str(csv_path))
 

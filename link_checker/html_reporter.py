@@ -60,6 +60,21 @@ class HTMLReportGenerator:
                 'semantic_duplicate': 0,
                 'off_topic': 0,
                 'orphaned_page': 0,
+                'missing_title': 0,
+                'duplicate_title': 0,
+                'missing_meta_description': 0,
+                'duplicate_meta_description': 0,
+                'missing_h1': 0,
+                'multiple_h1': 0,
+                'missing_alt': 0,
+                'thin_content': 0,
+                'deep_page': 0,
+                'unreachable_page': 0,
+                'invalid_json_ld': 0,
+                'missing_schema_context': 0,
+                'missing_schema_type': 0,
+                'schema_missing_fields': 0,
+                'core_web_vitals': 0,
             },
         }
         
@@ -179,6 +194,21 @@ class HTMLReportGenerator:
                 <option value="semantic_duplicate">Semantic Duplicate</option>
                 <option value="off_topic">Off-Topic</option>
                 <option value="orphaned_page">Orphaned Page</option>
+                <option value="missing_title">Missing Title</option>
+                <option value="duplicate_title">Duplicate Title</option>
+                <option value="missing_meta_description">Missing Meta Description</option>
+                <option value="duplicate_meta_description">Duplicate Meta Description</option>
+                <option value="missing_h1">Missing H1</option>
+                <option value="multiple_h1">Multiple H1</option>
+                <option value="missing_alt">Missing Alt Text</option>
+                <option value="thin_content">Thin Content</option>
+                <option value="deep_page">Deep Page</option>
+                <option value="unreachable_page">Unreachable Page</option>
+                <option value="invalid_json_ld">Invalid JSON-LD</option>
+                <option value="missing_schema_context">Missing Schema Context</option>
+                <option value="missing_schema_type">Missing Schema Type</option>
+                <option value="schema_missing_fields">Schema Missing Fields</option>
+                <option value="core_web_vitals">Core Web Vitals</option>
                 <option value="ok">OK</option>
             </select>
         </div>
@@ -882,6 +912,21 @@ function createIssueCard(item) {
         'semantic_duplicate': 'badge-chain',
         'off_topic': 'badge-redirect',
         'orphaned_page': 'badge-redirect',
+        'missing_title': 'badge-broken',
+        'duplicate_title': 'badge-broken',
+        'missing_meta_description': 'badge-redirect',
+        'duplicate_meta_description': 'badge-redirect',
+        'missing_h1': 'badge-redirect',
+        'multiple_h1': 'badge-redirect',
+        'missing_alt': 'badge-ok',
+        'thin_content': 'badge-ok',
+        'deep_page': 'badge-ok',
+        'unreachable_page': 'badge-ok',
+        'invalid_json_ld': 'badge-broken',
+        'missing_schema_context': 'badge-redirect',
+        'missing_schema_type': 'badge-redirect',
+        'schema_missing_fields': 'badge-ok',
+        'core_web_vitals': 'badge-chain',
     }[item.issue_type] || 'badge-redirect';
     
     const issueTypeLabel = {
@@ -895,6 +940,21 @@ function createIssueCard(item) {
         'semantic_duplicate': 'Semantic Duplicate',
         'off_topic': 'Off-Topic',
         'orphaned_page': 'Orphaned Page',
+        'missing_title': 'Missing Title',
+        'duplicate_title': 'Duplicate Title',
+        'missing_meta_description': 'Missing Meta Description',
+        'duplicate_meta_description': 'Duplicate Meta Description',
+        'missing_h1': 'Missing H1',
+        'multiple_h1': 'Multiple H1',
+        'missing_alt': 'Missing Alt Text',
+        'thin_content': 'Thin Content',
+        'deep_page': 'Deep Page',
+        'unreachable_page': 'Unreachable Page',
+        'invalid_json_ld': 'Invalid JSON-LD',
+        'missing_schema_context': 'Missing Schema Context',
+        'missing_schema_type': 'Missing Schema Type',
+        'schema_missing_fields': 'Schema Missing Fields',
+        'core_web_vitals': 'Core Web Vitals',
     }[item.issue_type] || item.issue_type;
     
     const occurrenceCount = parseInt(item.occurrence_count) || 1;

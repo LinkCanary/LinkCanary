@@ -17,16 +17,33 @@ from ..models.schemas import (
     CrawlListResponse,
     CrawlResponse,
     CrawlTransparencyResponse,
+    DiffCounts,
+    DiffResponse,
+    DiffSection,
     ReportIssue,
     ReportResponse,
     ShareResponse,
     ValidateSitemapRequest,
     ValidateSitemapResponse,
 )
+from ..services.diff import diff_issues
+from ..services.projects import resolve_or_create_project
+from ..services.reports import load_issues_from_path
 from ..storage import get_storage
 from ..tasks.crawl_task import run_crawl_in_background
 
 router = APIRouter(prefix="/api/crawls", tags=["crawls"])
+
+
+async def _get_org_crawl(db: AsyncSession, crawl_id: str, org_id: str) -> Crawl:
+    """Fetch a crawl scoped to the org, or 404 (don't leak existence)."""
+    result = await db.execute(
+        select(Crawl).where(Crawl.id == crawl_id, Crawl.org_id == org_id)
+    )
+    crawl = result.scalar_one_or_none()
+    if not crawl:
+        raise HTTPException(status_code=404, detail="Crawl not found")
+    return crawl
 
 
 def extract_domain(url: str) -> str:
@@ -58,15 +75,20 @@ async def create_crawl(
     sitemap_url = normalize_sitemap_url(request.sitemap_url)
     name = request.name or extract_domain(sitemap_url)
 
+    project = await resolve_or_create_project(db, ctx.org_id, sitemap_url)
+
     crawl = Crawl(
         name=name,
         sitemap_url=sitemap_url,
+        org_id=ctx.org_id,
+        project_id=project.id,
         status=CrawlStatus.PENDING,
         internal_only=request.settings.internal_only,
         external_only=request.settings.external_only,
         skip_ok=request.settings.skip_ok,
         expand_duplicates=request.settings.expand_duplicates,
         include_subdomains=request.settings.include_subdomains,
+        check_core_web_vitals=request.settings.check_core_web_vitals,
         delay=request.settings.delay,
         timeout=request.settings.timeout,
         max_pages=request.settings.max_pages,
@@ -89,10 +111,12 @@ async def list_crawls(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     status: Optional[str] = None,
+    project_id: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
+    ctx: RequestContext = Depends(get_current_user),
 ):
-    """List all crawls."""
-    query = select(Crawl).order_by(desc(Crawl.created_at))
+    """List crawls scoped to the authenticated org."""
+    query = select(Crawl).where(Crawl.org_id == ctx.org_id).order_by(desc(Crawl.created_at))
     
     if status:
         try:
@@ -100,8 +124,11 @@ async def list_crawls(
             query = query.where(Crawl.status == status_enum)
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
+
+    if project_id:
+        query = query.where(Crawl.project_id == project_id)
     
-    count_result = await db.execute(select(Crawl))
+    count_result = await db.execute(select(Crawl).where(Crawl.org_id == ctx.org_id))
     total = len(count_result.scalars().all())
     
     query = query.offset(skip).limit(limit)
@@ -118,14 +145,10 @@ async def list_crawls(
 async def get_crawl(
     crawl_id: str,
     db: AsyncSession = Depends(get_db),
+    ctx: RequestContext = Depends(get_current_user),
 ):
     """Get crawl details."""
-    result = await db.execute(select(Crawl).where(Crawl.id == crawl_id))
-    crawl = result.scalar_one_or_none()
-    
-    if not crawl:
-        raise HTTPException(status_code=404, detail="Crawl not found")
-    
+    crawl = await _get_org_crawl(db, crawl_id, ctx.org_id)
     return CrawlResponse(**crawl.to_dict())
 
 
@@ -133,13 +156,10 @@ async def get_crawl(
 async def delete_crawl(
     crawl_id: str,
     db: AsyncSession = Depends(get_db),
+    ctx: RequestContext = Depends(get_current_user),
 ):
     """Delete a crawl and its reports."""
-    result = await db.execute(select(Crawl).where(Crawl.id == crawl_id))
-    crawl = result.scalar_one_or_none()
-    
-    if not crawl:
-        raise HTTPException(status_code=404, detail="Crawl not found")
+    crawl = await _get_org_crawl(db, crawl_id, ctx.org_id)
     
     await db.delete(crawl)
     await db.commit()
@@ -151,13 +171,10 @@ async def delete_crawl(
 async def stop_crawl(
     crawl_id: str,
     db: AsyncSession = Depends(get_db),
+    ctx: RequestContext = Depends(get_current_user),
 ):
     """Stop a running crawl."""
-    result = await db.execute(select(Crawl).where(Crawl.id == crawl_id))
-    crawl = result.scalar_one_or_none()
-    
-    if not crawl:
-        raise HTTPException(status_code=404, detail="Crawl not found")
+    crawl = await _get_org_crawl(db, crawl_id, ctx.org_id)
     
     if crawl.status != CrawlStatus.IN_PROGRESS:
         raise HTTPException(status_code=400, detail="Crawl is not running")
@@ -176,23 +193,22 @@ async def rerun_crawl(
     ctx: RequestContext = Depends(get_current_user),
 ):
     """Re-run a crawl with the same settings. Enforces plan limits."""
-    result = await db.execute(select(Crawl).where(Crawl.id == crawl_id))
-    original = result.scalar_one_or_none()
-
-    if not original:
-        raise HTTPException(status_code=404, detail="Crawl not found")
+    original = await _get_org_crawl(db, crawl_id, ctx.org_id)
 
     await check_crawl_allowed(ctx.org, original.max_pages, db)
 
     crawl = Crawl(
         name=f"{original.name} (re-run)",
         sitemap_url=original.sitemap_url,
+        org_id=ctx.org_id,
+        project_id=original.project_id,
         status=CrawlStatus.PENDING,
         internal_only=original.internal_only,
         external_only=original.external_only,
         skip_ok=original.skip_ok,
         expand_duplicates=original.expand_duplicates,
         include_subdomains=original.include_subdomains,
+        check_core_web_vitals=original.check_core_web_vitals,
         delay=original.delay,
         timeout=original.timeout,
         max_pages=original.max_pages,
@@ -214,40 +230,16 @@ async def rerun_crawl(
 async def get_report(
     crawl_id: str,
     db: AsyncSession = Depends(get_db),
+    ctx: RequestContext = Depends(get_current_user),
 ):
     """Get report data as JSON."""
-    result = await db.execute(select(Crawl).where(Crawl.id == crawl_id))
-    crawl = result.scalar_one_or_none()
-    
-    if not crawl:
-        raise HTTPException(status_code=404, detail="Crawl not found")
+    crawl = await _get_org_crawl(db, crawl_id, ctx.org_id)
     
     if not crawl.report_csv_path:
         raise HTTPException(status_code=404, detail="Report not available")
     
-    issues = []
     try:
-        with open(get_storage().localize(crawl.report_csv_path), newline='', encoding='utf-8') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                example_pages = row.get('example_pages', '')
-                issues.append(ReportIssue(
-                    source_page=row.get('source_page', ''),
-                    occurrence_count=int(row.get('occurrence_count', 1)),
-                    example_pages=example_pages.split('|') if example_pages else [],
-                    link_url=row.get('link_url', ''),
-                    link_text=row.get('link_text', ''),
-                    link_type=row.get('link_type', ''),
-                    element_type=row.get('element_type', 'a'),
-                    status_code=int(row.get('status_code', 0)),
-                    issue_type=row.get('issue_type', ''),
-                    priority=row.get('priority', ''),
-                    redirect_chain=row.get('redirect_chain') or None,
-                    final_url=row.get('final_url') or None,
-                    recommended_fix=row.get('recommended_fix', ''),
-                    response_time_ms=float(row['response_time_ms']) if row.get('response_time_ms') else None,
-                    anchor_quality=row.get('anchor_quality', ''),
-                ))
+        issues = load_issues_from_path(get_storage().localize(crawl.report_csv_path))
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Report file not found")
     
@@ -261,13 +253,10 @@ async def get_report(
 async def get_transparency(
     crawl_id: str,
     db: AsyncSession = Depends(get_db),
+    ctx: RequestContext = Depends(get_current_user),
 ):
     """Get crawl transparency summary — what was scanned and how."""
-    result = await db.execute(select(Crawl).where(Crawl.id == crawl_id))
-    crawl = result.scalar_one_or_none()
-
-    if not crawl:
-        raise HTTPException(status_code=404, detail="Crawl not found")
+    crawl = await _get_org_crawl(db, crawl_id, ctx.org_id)
 
     status_dist: dict[str, int] = {}
     link_types: dict[str, int] = {"internal": 0, "external": 0}
@@ -335,17 +324,14 @@ async def get_transparency(
 async def share_crawl(
     crawl_id: str,
     db: AsyncSession = Depends(get_db),
+    ctx: RequestContext = Depends(get_current_user),
     request: None = None,
 ):
     """Generate a shareable public link for a crawl report."""
     import uuid as uuid_lib
     from fastapi import Request
 
-    result = await db.execute(select(Crawl).where(Crawl.id == crawl_id))
-    crawl = result.scalar_one_or_none()
-
-    if not crawl:
-        raise HTTPException(status_code=404, detail="Crawl not found")
+    crawl = await _get_org_crawl(db, crawl_id, ctx.org_id)
 
     if crawl.status not in (CrawlStatus.COMPLETED,):
         raise HTTPException(status_code=400, detail="Crawl must be completed before sharing")
@@ -375,33 +361,83 @@ async def get_shared_report(
     if not crawl.report_csv_path:
         raise HTTPException(status_code=404, detail="Report not available")
 
-    issues = []
     try:
-        with open(get_storage().localize(crawl.report_csv_path), newline='', encoding='utf-8') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                example_pages = row.get('example_pages', '')
-                issues.append(ReportIssue(
-                    source_page=row.get('source_page', ''),
-                    occurrence_count=int(row.get('occurrence_count', 1)),
-                    example_pages=example_pages.split('|') if example_pages else [],
-                    link_url=row.get('link_url', ''),
-                    link_text=row.get('link_text', ''),
-                    link_type=row.get('link_type', ''),
-                    element_type=row.get('element_type', 'a'),
-                    status_code=int(row.get('status_code', 0)),
-                    issue_type=row.get('issue_type', ''),
-                    priority=row.get('priority', ''),
-                    redirect_chain=row.get('redirect_chain') or None,
-                    final_url=row.get('final_url') or None,
-                    recommended_fix=row.get('recommended_fix', ''),
-                    response_time_ms=float(row['response_time_ms']) if row.get('response_time_ms') else None,
-                    anchor_quality=row.get('anchor_quality', ''),
-                ))
+        issues = load_issues_from_path(get_storage().localize(crawl.report_csv_path))
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Report file not found")
 
     return ReportResponse(crawl_id=crawl.id, issues=issues, total=len(issues))
+
+
+async def _find_prior_crawl(
+    db: AsyncSession, crawl: Crawl, org_id: str
+) -> Optional[Crawl]:
+    """Return the most recent completed prior crawl in the same project (or site)."""
+    query = (
+        select(Crawl)
+        .where(
+            Crawl.org_id == org_id,
+            Crawl.status == CrawlStatus.COMPLETED,
+            Crawl.id != crawl.id,
+            Crawl.created_at < crawl.created_at,
+        )
+        .order_by(desc(Crawl.created_at))
+        .limit(1)
+    )
+    if crawl.project_id:
+        query = query.where(Crawl.project_id == crawl.project_id)
+    else:
+        query = query.where(Crawl.sitemap_url == crawl.sitemap_url)
+    result = await db.execute(query)
+    return result.scalar_one_or_none()
+
+
+def _load_crawl_issues(crawl: Crawl) -> list[ReportIssue]:
+    """Load a crawl's per-issue rows, tolerating a missing report."""
+    if not crawl.report_csv_path:
+        return []
+    try:
+        return load_issues_from_path(get_storage().localize(crawl.report_csv_path))
+    except FileNotFoundError:
+        return []
+
+
+def _to_section(bucket) -> DiffSection:
+    return DiffSection(
+        counts=DiffCounts(**bucket.counts()),
+        issues=bucket.by_priority(),
+    )
+
+
+@router.get("/{crawl_id}/diff", response_model=DiffResponse)
+async def diff_crawl(
+    crawl_id: str,
+    against: Optional[str] = Query(
+        None, description="Crawl ID to diff against, or 'latest' (default) for the prior crawl"
+    ),
+    db: AsyncSession = Depends(get_db),
+    ctx: RequestContext = Depends(get_current_user),
+):
+    """Diff this crawl against a prior one: new / resolved / persistent issues."""
+    crawl = await _get_org_crawl(db, crawl_id, ctx.org_id)
+
+    if against and against != "latest":
+        prior = await _get_org_crawl(db, against, ctx.org_id)
+    else:
+        prior = await _find_prior_crawl(db, crawl, ctx.org_id)
+
+    if prior is None:
+        raise HTTPException(status_code=404, detail="No prior crawl to diff against")
+
+    diff = diff_issues(_load_crawl_issues(crawl), _load_crawl_issues(prior))
+
+    return DiffResponse(
+        crawl_id=crawl.id,
+        against_crawl_id=prior.id,
+        new=_to_section(diff.new),
+        resolved=_to_section(diff.resolved),
+        persistent=_to_section(diff.persistent),
+    )
 
 
 @router.post("/validate-sitemap", response_model=ValidateSitemapResponse)
