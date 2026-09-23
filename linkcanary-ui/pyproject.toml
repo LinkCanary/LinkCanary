@@ -73,8 +73,8 @@ reporting = [
 linkcanary-ui = "linkcanary_ui.main:cli"
 
 [project.urls]
-Homepage = "https://github.com/chesterbeard/linkcanary"
-Repository = "https://github.com/chesterbeard/linkcanary"
+Homepage = "https://github.com/LinkCanary/LinkCanary"
+Repository = "https://github.com/LinkCanary/LinkCanary"
 
 [tool.setuptools.packages.find]
 where = ["."]

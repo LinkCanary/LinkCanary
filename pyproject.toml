@@ -62,9 +62,9 @@ linkcheck-report = "link_checker.report_cli:main"
 linkcanary-mcp = "link_checker.mcp_server:run"
 
 [project.urls]
-Homepage = "https://github.com/chesterbeard/linkcanary"
-Repository = "https://github.com/chesterbeard/linkcanary"
-Issues = "https://github.com/chesterbeard/linkcanary/issues"
+Homepage = "https://github.com/LinkCanary/LinkCanary"
+Repository = "https://github.com/LinkCanary/LinkCanary"
+Issues = "https://github.com/LinkCanary/LinkCanary/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]
