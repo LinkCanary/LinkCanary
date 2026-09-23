@@ -378,7 +378,7 @@
         <div class="prow"><span class="u">acme.com/pricing</span><span class="ms">142ms</span><span class="st ok">200</span></div>
         <div class="prow"><span class="u">acme.com/docs/api</span><span class="ms">96ms</span><span class="st ok">200</span></div>
         <div class="prow broken"><span class="u">acme.com/blog/2019-launch</span><span class="ms">—</span><span class="st bad">404</span></div>
-        <div class="panel-foot">Alert sent → <b>#eng-alerts</b> · 0.8s ago</div>
+        <div class="panel-foot">Alert sent → <b>Discord #alerts</b> · 0.8s ago</div>
       </div>
      </div>
     </div>
@@ -435,7 +435,7 @@
     <div class="grid">
       <div class="cell g rv"><div class="ix">01</div><h3>Uptime monitoring</h3><p>Checks your sites and endpoints as often as every 30 seconds, from multiple regions — so a blip in one location never fools you.</p><div class="sw"></div></div>
       <div class="cell r rv"><div class="ix">02</div><h3>Broken-link crawling</h3><p>Crawls your entire site on a schedule and flags every 404, dead redirect, and rotten outbound link — internal and external.</p><div class="sw"></div></div>
-      <div class="cell rv"><div class="ix">03</div><h3>Instant alerts</h3><p>Email, Slack, Discord, SMS, PagerDuty, or webhook. Know within seconds — with the exact URL, status code, and screenshot.</p><div class="sw"></div></div>
+      <div class="cell rv"><div class="ix">03</div><h3>Instant alerts</h3><p>Discord, Telegram, ntfy, email — or any webhook you point us at. Seconds, not hours, with the exact URL, status code, and screenshot.</p><div class="sw"></div></div>
       <div class="cell t rv"><div class="ix">04</div><h3>Public status pages</h3><p>Hosted status pages on your own domain — keep customers informed and cut support tickets during incidents.</p><div class="sw"></div></div>
       <div class="cell o rv"><div class="ix">05</div><h3>SSL &amp; domain expiry</h3><p>Get warned weeks before a TLS certificate or domain registration lapses — never get caught by a surprise expiry again.</p><div class="sw"></div></div>
       <div class="cell gd rv"><div class="ix">06</div><h3>History &amp; insights</h3><p>Response-time graphs, incident timelines, and shareable uptime &amp; SLA reports — proof of reliability, ready to export.</p><div class="sw"></div></div>
@@ -512,7 +512,7 @@
         <ul>
           <li><i>+</i>500 monitored checks</li>
           <li><i>+</i>1-minute interval, multi-region</li>
-          <li><i>+</i>All alert channels</li>
+          <li><i>+</i>Every alert channel &amp; webhooks</li>
           <li><i>+</i>SSL &amp; domain expiry</li>
           <li><i>+</i>1-year history &amp; SLA reports</li>
         </ul>
@@ -546,7 +546,8 @@
     <div class="faq">
       <details open><summary>How often does LinkCanary check my links?<span class="pm">+</span></summary><div class="ans">As often as every 30 seconds on paid plans, and every 5 minutes on the free plan. You can set different intervals per monitor — tight checks for your checkout flow, relaxed ones for your blog archive.</div></details>
       <details><summary>What exactly can it monitor?<span class="pm">+</span></summary><div class="ans">Websites and landing pages, API endpoints, internal and outbound links, redirects, SSL certificates, domain expiry, keyword presence, and specific status codes. If it speaks HTTP, the canary can watch it.</div></details>
-      <details><summary>How do alerts reach me?<span class="pm">+</span></summary><div class="ans">Email, Slack, Discord, SMS, PagerDuty, Microsoft Teams, or any webhook. Every alert includes the failing URL, status code, response time, region, and a screenshot — and we notify you again the moment it recovers.</div></details>
+      <details><summary>How do alerts reach me?<span class="pm">+</span></summary><div class="ans">Discord, Telegram, ntfy, or plain email — and any webhook, so Slack, Mattermost, Matrix, Gotify, n8n or your own endpoint all work too. Every alert carries the failing URL, status code, response time, region, and a screenshot, and we tell you again the moment it recovers.</div></details>
+      <details><summary>I self-host everything. Does that still work?<span class="pm">+</span></summary><div class="ans">Yes — that's who this is built for. Nothing in LinkCanary requires a hosted chat service. ntfy and Gotify are first-class, and a webhook covers whatever else you run, whether that's Mattermost, Rocket.Chat, Matrix, or a script on your own box.</div></details>
       <details><summary>Is there really a free plan?<span class="pm">+</span></summary><div class="ans">Yes — 50 checks free, forever, no credit card required. It's built for personal sites and side-projects, and you can upgrade the moment you need tighter intervals or more channels.</div></details>
       <details><summary>Can I monitor staging or password-protected sites?<span class="pm">+</span></summary><div class="ans">Absolutely. Add custom request headers, basic-auth credentials, or bearer tokens per monitor, and LinkCanary will check authenticated and internal environments just like production.</div></details>
       <details><summary>How is this different from Google Search Console?<span class="pm">+</span></summary><div class="ans">Search Console reports problems days later, and only for pages Google has crawled. LinkCanary checks your links on your schedule and alerts you in seconds — covering uptime, APIs, SSL, and outbound links that Search Console never touches.</div></details>
@@ -648,7 +649,7 @@
       var p = paths[i % paths.length]; i++;
       if(i % 7 === 0){
         push('<span class="t">'+ts()+'</span> <span class="m">GET</span> acme.com'+p+'  <span class="bad">404</span>  <span class="bad">broken link</span>');
-        setTimeout(function(){ push('<span class="t">'+ts()+'</span> <span class="al">ALERT</span> <span class="d">sent → #eng-alerts, ops@acme.com</span>'); render(); }, 460);
+        setTimeout(function(){ push('<span class="t">'+ts()+'</span> <span class="al">ALERT</span> <span class="d">sent → Discord #alerts · ntfy · email</span>'); render(); }, 460);
       } else {
         push('<span class="t">'+ts()+'</span> <span class="m">GET</span> acme.com'+p+'  <span class="ok">200</span>  <span class="d">'+rnd(72,260)+'ms</span>');
       }
