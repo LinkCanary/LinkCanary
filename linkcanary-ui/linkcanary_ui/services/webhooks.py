@@ -207,6 +207,147 @@ Summary:
 
         return task_data
 
+    def format_ntfy_payload(self, payload: dict, webhook: Webhook) -> str:
+        """Format payload as Markdown body for ntfy."""
+        event = payload.get("event", "").replace("_", " ").title()
+        status = payload.get("status", "")
+        summary = payload.get("summary", {})
+        issues = summary.get("issues", {})
+        total_issues = sum(issues.values())
+
+        lines = [
+            f"## {event}",
+            "",
+            f"**Sitemap:** {payload.get('sitemap_url', 'N/A')}",
+            f"**Status:** {status.title()}",
+            f"**Pages Crawled:** {summary.get('pages_crawled', 0)}",
+            f"**Links Checked:** {summary.get('links_checked', 0)}",
+        ]
+
+        if total_issues > 0:
+            lines.append(f"**Issues Found:** {total_issues}")
+            lines.append(f"- Critical: {issues.get('critical', 0)}")
+            lines.append(f"- High: {issues.get('high', 0)}")
+            lines.append(f"- Medium: {issues.get('medium', 0)}")
+            lines.append(f"- Low: {issues.get('low', 0)}")
+
+        if payload.get("report_url"):
+            lines.append(f"\n[View Report]({payload['report_url']})")
+
+        return "\n".join(lines)
+
+    def send_ntfy(self, webhook: Webhook, payload: dict) -> tuple[bool, Optional[str]]:
+        """Send notification to ntfy. Returns (success, error_message)."""
+        if not webhook.ntfy_topic:
+            return False, "ntfy configuration incomplete (missing topic)"
+
+        try:
+            server = (webhook.ntfy_server or "https://ntfy.sh").rstrip("/")
+            url = f"{server}/{webhook.ntfy_topic}"
+
+            headers = {
+                "Content-Type": "text/markdown",
+                "Title": f"LinkCanary: {payload.get('event', '').replace('_', ' ').title()}",
+                "Tags": "warning,linkcanary" if payload.get("status") != "completed" else "white_check_mark,linkcanary",
+                "Click": payload.get("report_url", ""),
+            }
+
+            priority = webhook.ntfy_priority or "default"
+            if priority != "default":
+                headers["Priority"] = priority
+
+            if webhook.ntfy_token:
+                headers["Authorization"] = f"Bearer {webhook.ntfy_token}"
+
+            body = self.format_ntfy_payload(payload, webhook)
+
+            response = requests.post(
+                url,
+                data=body.encode("utf-8"),
+                headers=headers,
+                timeout=self.timeout,
+            )
+
+            if response.status_code in (200, 201):
+                return True, None
+            else:
+                return False, f"HTTP {response.status_code}: {response.text[:200]}"
+
+        except requests.Timeout:
+            return False, "Request timed out"
+        except requests.RequestException as e:
+            return False, str(e)
+        except Exception as e:
+            return False, f"Unexpected error: {str(e)}"
+
+    def format_gotify_payload(self, payload: dict, webhook: Webhook) -> dict:
+        """Format payload for Gotify message."""
+        event = payload.get("event", "").replace("_", " ").title()
+        status = payload.get("status", "")
+        summary = payload.get("summary", {})
+        issues = summary.get("issues", {})
+        total_issues = sum(issues.values())
+
+        title = f"LinkCanary: {event}"
+        lines = [
+            f"Sitemap: {payload.get('sitemap_url', 'N/A')}",
+            f"Status: {status.title()}",
+            f"Pages Crawled: {summary.get('pages_crawled', 0)}",
+            f"Links Checked: {summary.get('links_checked', 0)}",
+        ]
+
+        if total_issues > 0:
+            lines.append(f"Issues Found: {total_issues}")
+            lines.append(f"  Critical: {issues.get('critical', 0)}, High: {issues.get('high', 0)}, "
+                         f"Medium: {issues.get('medium', 0)}, Low: {issues.get('low', 0)}")
+
+        message = "\n".join(lines)
+
+        body = {
+            "title": title,
+            "message": message,
+            "priority": webhook.gotify_priority or 5,
+        }
+
+        if payload.get("report_url"):
+            body["extras"] = {
+                "client::notification": {
+                    "click": {"url": payload["report_url"]},
+                }
+            }
+
+        return body
+
+    def send_gotify(self, webhook: Webhook, payload: dict) -> tuple[bool, Optional[str]]:
+        """Send message to Gotify. Returns (success, error_message)."""
+        if not webhook.gotify_url or not webhook.gotify_token:
+            return False, "Gotify configuration incomplete (missing URL or token)"
+
+        try:
+            url = f"{webhook.gotify_url.rstrip('/')}/message"
+            params = {"token": webhook.gotify_token}
+            body = self.format_gotify_payload(payload, webhook)
+
+            response = requests.post(
+                url,
+                json=body,
+                params=params,
+                headers={"Content-Type": "application/json"},
+                timeout=self.timeout,
+            )
+
+            if response.status_code in (200, 201):
+                return True, None
+            else:
+                return False, f"HTTP {response.status_code}: {response.text[:200]}"
+
+        except requests.Timeout:
+            return False, "Request timed out"
+        except requests.RequestException as e:
+            return False, str(e)
+        except Exception as e:
+            return False, f"Unexpected error: {str(e)}"
+
     def send_jira(self, webhook: Webhook, payload: dict) -> tuple[bool, Optional[str]]:
         """Send issue to Jira. Returns (success, error_message)."""
         if not webhook.jira_url or not webhook.jira_api_token:
@@ -300,6 +441,14 @@ Summary:
         # Handle Asana integration
         if webhook.type == WebhookType.ASANA:
             return self.send_asana(webhook, payload)
+
+        # Handle ntfy integration
+        if webhook.type == WebhookType.NTFY:
+            return self.send_ntfy(webhook, payload)
+
+        # Handle Gotify integration
+        if webhook.type == WebhookType.GOTIFY:
+            return self.send_gotify(webhook, payload)
 
         # Handle standard webhooks (Slack, Discord, Generic)
         try:

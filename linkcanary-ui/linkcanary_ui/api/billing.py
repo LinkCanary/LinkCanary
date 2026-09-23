@@ -35,6 +35,17 @@ def _stripe():
     return stripe
 
 
+@router.get("/links")
+async def get_payment_links():
+    """Public: return Stripe Payment Link URLs for the landing page."""
+    return {
+        "songbird_monthly": settings.stripe_link_songbird_monthly,
+        "songbird_yearly": settings.stripe_link_songbird_yearly,
+        "flock_monthly": settings.stripe_link_flock_monthly,
+        "flock_yearly": settings.stripe_link_flock_yearly,
+    }
+
+
 @router.post("/portal")
 async def create_portal(
     ctx: RequestContext = Depends(get_current_user),

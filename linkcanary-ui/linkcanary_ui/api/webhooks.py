@@ -27,7 +27,7 @@ def validate_webhook_type(webhook_type: str) -> WebhookType:
     except ValueError:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid webhook type: {webhook_type}. Must be one of: slack, discord, generic, jira, asana"
+            detail=f"Invalid webhook type: {webhook_type}. Must be one of: slack, discord, generic, jira, asana, ntfy, gotify"
         )
 
 
@@ -70,6 +70,15 @@ async def create_webhook(
         asana_token=request.asana_token,
         asana_workspace_id=request.asana_workspace_id,
         asana_project_id=request.asana_project_id,
+        # ntfy configuration
+        ntfy_server=request.ntfy_server,
+        ntfy_topic=request.ntfy_topic,
+        ntfy_token=request.ntfy_token,
+        ntfy_priority=request.ntfy_priority,
+        # Gotify configuration
+        gotify_url=request.gotify_url,
+        gotify_token=request.gotify_token,
+        gotify_priority=request.gotify_priority,
     )
 
     db.add(webhook)
@@ -172,6 +181,22 @@ async def update_webhook(
         webhook.asana_workspace_id = request.asana_workspace_id
     if request.asana_project_id is not None:
         webhook.asana_project_id = request.asana_project_id
+    # ntfy configuration updates
+    if request.ntfy_server is not None:
+        webhook.ntfy_server = request.ntfy_server
+    if request.ntfy_topic is not None:
+        webhook.ntfy_topic = request.ntfy_topic
+    if request.ntfy_token is not None:
+        webhook.ntfy_token = request.ntfy_token
+    if request.ntfy_priority is not None:
+        webhook.ntfy_priority = request.ntfy_priority
+    # Gotify configuration updates
+    if request.gotify_url is not None:
+        webhook.gotify_url = request.gotify_url
+    if request.gotify_token is not None:
+        webhook.gotify_token = request.gotify_token
+    if request.gotify_priority is not None:
+        webhook.gotify_priority = request.gotify_priority
 
     await db.commit()
     await db.refresh(webhook)

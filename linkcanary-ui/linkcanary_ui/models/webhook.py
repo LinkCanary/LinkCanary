@@ -18,6 +18,8 @@ class WebhookType(str, enum.Enum):
     GENERIC = "generic"
     JIRA = "jira"
     ASANA = "asana"
+    NTFY = "ntfy"
+    GOTIFY = "gotify"
 
 
 class WebhookEvent(str, enum.Enum):
@@ -65,6 +67,17 @@ class Webhook(Base):
     asana_token: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     asana_workspace_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     asana_project_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+
+    # ntfy configuration
+    ntfy_server: Mapped[Optional[str]] = mapped_column(Text, nullable=True, default="https://ntfy.sh")
+    ntfy_topic: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    ntfy_token: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    ntfy_priority: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, default="default")
+
+    # Gotify configuration
+    gotify_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    gotify_token: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    gotify_priority: Mapped[int] = mapped_column(default=5)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
@@ -118,6 +131,13 @@ class Webhook(Base):
             "asana_token": "***" if self.asana_token else None,
             "asana_workspace_id": self.asana_workspace_id,
             "asana_project_id": self.asana_project_id,
+            "ntfy_server": self.ntfy_server,
+            "ntfy_topic": self.ntfy_topic,
+            "ntfy_token": "***" if self.ntfy_token else None,
+            "ntfy_priority": self.ntfy_priority,
+            "gotify_url": self.gotify_url,
+            "gotify_token": "***" if self.gotify_token else None,
+            "gotify_priority": self.gotify_priority,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "last_triggered_at": self.last_triggered_at.isoformat() if self.last_triggered_at else None,
             "last_trigger_status": self.last_trigger_status,
